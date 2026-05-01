@@ -271,3 +271,19 @@ pub fn logout(app: tauri::AppHandle) -> Result<(), String> {
     
     Ok(())
 }
+
+#[tauri::command]
+pub fn get_inbox_unread_count(app: tauri::AppHandle) -> Result<i64, String> {
+    let db_path = get_db_path(&app);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM emails WHERE label = 'inbox' AND unread = 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    
+    Ok(count)
+}

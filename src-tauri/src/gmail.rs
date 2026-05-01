@@ -2,12 +2,14 @@ use reqwest::Client;
 use serde::Deserialize;
 use base64::Engine;
 use crate::db::{upsert_emails, Email};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use futures::stream::{self, StreamExt};
 
 #[derive(Deserialize, Debug)]
 struct MessageListResponse {
     messages: Option<Vec<MessageId>>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -138,26 +140,48 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
     }
 }
 
-/// Fetch a list of message IDs from Gmail
+/// Fetch a list of message IDs from Gmail (with pagination support)
 async fn fetch_message_ids(client: &Client, access_token: &str, query: &str, max_results: u32) -> Result<Vec<MessageId>, String> {
-    let url = format!(
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={}&q={}",
-        max_results, query
-    );
-    
-    let res = client
-        .get(&url)
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|e| format!("List fetch error: {}", e))?;
+    let mut all_messages = Vec::new();
+    let mut page_token: Option<String> = None;
+    let page_size = std::cmp::min(max_results, 100); // Gmail max per page is 100
 
-    if !res.status().is_success() {
-        return Err(format!("Gmail API Error: {}", res.text().await.unwrap_or_default()));
+    loop {
+        let mut url = format!(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={}&q={}",
+            page_size, query
+        );
+        if let Some(ref token) = page_token {
+            url.push_str(&format!("&pageToken={}", token));
+        }
+
+        let res = client
+            .get(&url)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| format!("List fetch error: {}", e))?;
+
+        if !res.status().is_success() {
+            return Err(format!("Gmail API Error: {}", res.text().await.unwrap_or_default()));
+        }
+
+        let list_data: MessageListResponse = res.json().await.map_err(|e| e.to_string())?;
+        
+        if let Some(msgs) = list_data.messages {
+            all_messages.extend(msgs);
+        }
+
+        // Stop if we have enough or no more pages
+        if all_messages.len() >= max_results as usize || list_data.next_page_token.is_none() {
+            break;
+        }
+        page_token = list_data.next_page_token;
     }
 
-    let list_data: MessageListResponse = res.json().await.map_err(|e| e.to_string())?;
-    Ok(list_data.messages.unwrap_or_default())
+    // Trim to exact max
+    all_messages.truncate(max_results as usize);
+    Ok(all_messages)
 }
 
 /// Fetch full details of a single message
@@ -178,20 +202,42 @@ async fn fetch_message_detail(client: &Client, access_token: &str, msg_id: &str)
 
 #[tauri::command]
 pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), String> {
+    // Prevent concurrent syncs
+    let state = app.state::<crate::SyncState>();
+    {
+        let mut lock = state.is_syncing.lock().map_err(|_| "Sync lock poisoned")?;
+        if *lock {
+            return Ok(()); // Already syncing, skip
+        }
+        *lock = true;
+    }
+
+    let result = do_sync(&app, &access_token).await;
+
+    // Release lock
+    if let Ok(mut lock) = state.is_syncing.lock() {
+        *lock = false;
+    }
+
+    result
+}
+
+async fn do_sync(app: &AppHandle, access_token: &str) -> Result<(), String> {
     let client = Client::new();
     let mut all_ids = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
     let queries = vec![
-        ("in:inbox", 50u32),
-        ("in:sent", 30),
-        ("in:spam", 20),
-        ("in:trash", 20),
+        ("in:inbox", 500u32),
+        ("in:sent", 200),
+        ("in:spam", 50),
+        ("in:trash", 50),
+        ("-in:inbox -in:sent -in:spam -in:trash -in:drafts", 100), // Archive
     ];
 
     // Collect all unique message IDs first
     for (query, max) in queries {
-        if let Ok(ids) = fetch_message_ids(&client, &access_token, query, max).await {
+        if let Ok(ids) = fetch_message_ids(&client, access_token, query, max).await {
             for msg in ids {
                 if seen_ids.insert(msg.id.clone()) {
                     all_ids.push(msg.id);
@@ -204,7 +250,7 @@ pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), Str
     let parsed_emails: Vec<Email> = stream::iter(all_ids)
         .map(|id| {
             let client = &client;
-            let token = &access_token;
+            let token = access_token;
             async move {
                 fetch_message_detail(client, token, &id)
                     .await
@@ -217,8 +263,14 @@ pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), Str
         .collect()
         .await;
 
-    // Save to database
-    upsert_emails(&app, parsed_emails).map_err(|e| e.to_string())?;
+    // Save to database (spawn_blocking to avoid blocking tokio)
+    let app_clone = app.clone();
+    tokio::task::spawn_blocking(move || {
+        upsert_emails(&app_clone, parsed_emails).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("DB task failed: {}", e))??;
+
     Ok(())
 }
 
