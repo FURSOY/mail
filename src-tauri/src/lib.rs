@@ -12,6 +12,9 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Load .env file for OAuth credentials
+            let _ = dotenvy::dotenv();
+
             // Initialize database on startup
             db::init_db(app.handle()).expect("Failed to initialize database");
             Ok(())

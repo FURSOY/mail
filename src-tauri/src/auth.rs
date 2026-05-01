@@ -4,9 +4,18 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::time::{timeout, Duration};
 use tauri_plugin_opener::OpenerExt;
 
-const CLIENT_ID: &str = "722061365328-9ek70n5q5tq7mcqgft63dcfq8g2fiiq0.apps.googleusercontent.com";
-const CLIENT_SECRET: &str = "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";
 const REDIRECT_URI: &str = "http://127.0.0.1:8123/callback";
+
+/// Read OAuth credentials from environment variables (loaded from .env)
+fn get_client_id() -> String {
+    std::env::var("GOOGLE_CLIENT_ID")
+        .expect("GOOGLE_CLIENT_ID environment variable not set. Create src-tauri/.env file.")
+}
+
+fn get_client_secret() -> String {
+    std::env::var("GOOGLE_CLIENT_SECRET")
+        .expect("GOOGLE_CLIENT_SECRET environment variable not set. Create src-tauri/.env file.")
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AuthResponse {
@@ -25,21 +34,24 @@ struct UserInfo {
 
 #[tauri::command]
 pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::AuthInfo, String> {
+    let client_id = get_client_id();
+
     // 1. Oauth URL'ini oluştur
     let auth_url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&access_type=offline&prompt=consent&scope=https://www.googleapis.com/auth/gmail.modify%20https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/userinfo.profile%20https://www.googleapis.com/auth/userinfo.email",
-        CLIENT_ID, REDIRECT_URI
+        client_id, REDIRECT_URI
     );
 
     // 2. Tarayıcıda aç
     app.opener().open_url(auth_url, None::<&str>).map_err(|e| e.to_string())?;
 
-    // 3. Lokal sunucuyu başlat ve portu dinle (Asenkron ve Timeout ile)
+    // 3. Lokal sunucuyu başlat — tek bağlantı al, sonra kapat
     let listener = TcpListener::bind("127.0.0.1:8123")
         .await
         .map_err(|_| "Port 8123 kullanimda. Lutfen arkada acik kalan uygulamalari kapatin.")?;
 
     let code_result = timeout(Duration::from_secs(120), async {
+        // Only accept connections until we get the code, then exit
         loop {
             if let Ok((mut stream, _)) = listener.accept().await {
                 let mut reader = BufReader::new(&mut stream);
@@ -52,19 +64,23 @@ pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::Auth
                         
                         let mut parsed_code = request_line[code_start..code_end].to_string();
                         
-                        // Handle '&' if there are other query params like '&scope='
                         if let Some(amp) = parsed_code.find('&') {
                             parsed_code = parsed_code[..amp].to_string();
                         }
                         
-                        // Tarayıcıdan gelen %2F karakterini / olarak düzelt
                         parsed_code = parsed_code.replace("%2F", "/").replace("%2f", "/");
 
                         let response = "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><body style='display:flex;justify-content:center;align-items:center;height:100vh;background:#09090b;color:#fff;font-family:sans-serif;'><h2>Giris basarili! Bu sekmeyi kapatabilirsiniz.</h2><script>window.close();</script></body></html>";
                         let _ = stream.write_all(response.as_bytes()).await;
                         let _ = stream.flush().await;
 
+                        // Drop the listener explicitly — stop accepting connections
+                        drop(listener);
                         return Some(parsed_code);
+                    } else {
+                        // Respond to non-callback requests (favicon, etc.) and continue
+                        let response = "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n";
+                        let _ = stream.write_all(response.as_bytes()).await;
                     }
                 }
             }
@@ -108,10 +124,13 @@ pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::Auth
 }
 
 async fn exchange_code_for_token(code: &str) -> Result<AuthResponse, String> {
+    let client_id = get_client_id();
+    let client_secret = get_client_secret();
+
     let client = reqwest::Client::new();
     let params = [
-        ("client_id", CLIENT_ID),
-        ("client_secret", CLIENT_SECRET),
+        ("client_id", client_id.as_str()),
+        ("client_secret", client_secret.as_str()),
         ("code", code),
         ("grant_type", "authorization_code"),
         ("redirect_uri", REDIRECT_URI),
@@ -135,7 +154,6 @@ async fn exchange_code_for_token(code: &str) -> Result<AuthResponse, String> {
 
 #[tauri::command]
 pub async fn refresh_access_token(app: tauri::AppHandle) -> Result<crate::db::AuthInfo, String> {
-    // 1. Get stored auth info with refresh_token
     let existing = crate::db::get_auth_info(app.clone())
         .map_err(|e| e.to_string())?
         .ok_or("No stored auth info found")?;
@@ -144,11 +162,13 @@ pub async fn refresh_access_token(app: tauri::AppHandle) -> Result<crate::db::Au
         return Err("No refresh token available. Please login again.".into());
     }
 
-    // 2. Use refresh_token to get a new access_token
+    let client_id = get_client_id();
+    let client_secret = get_client_secret();
+
     let client = reqwest::Client::new();
     let params = [
-        ("client_id", CLIENT_ID),
-        ("client_secret", CLIENT_SECRET),
+        ("client_id", client_id.as_str()),
+        ("client_secret", client_secret.as_str()),
         ("refresh_token", existing.refresh_token.as_str()),
         ("grant_type", "refresh_token"),
     ];
@@ -167,7 +187,6 @@ pub async fn refresh_access_token(app: tauri::AppHandle) -> Result<crate::db::Au
 
     let token_resp: AuthResponse = res.json().await.map_err(|e| e.to_string())?;
 
-    // 3. Save updated auth info (keep existing refresh_token if new one isn't provided)
     let updated = crate::db::AuthInfo {
         access_token: token_resp.access_token,
         refresh_token: token_resp.refresh_token.unwrap_or(existing.refresh_token),

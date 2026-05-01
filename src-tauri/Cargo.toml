@@ -27,3 +27,4 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 tokio = { version = "1.37", features = ["full"] }
 base64 = "0.22"
 futures = "0.3"
+dotenvy = "0.15"
