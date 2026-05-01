@@ -9,6 +9,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", "sans-serif"],
+      },
       colors: {
         border: "var(--border)",
         input: "var(--input)",
