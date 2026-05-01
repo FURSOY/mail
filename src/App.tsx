@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3 } from "lucide-react";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import "./index.css";
 
 interface Email {
@@ -38,13 +39,28 @@ function App() {
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [toasts, setToasts] = useState<{id: number; msg: string; type: 'error'|'success'|'info'}[]>([]);
+  const [inboxUnread, setInboxUnread] = useState(0);
+  const [tokenExpired, setTokenExpired] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const knownEmailIdsRef = useRef<Set<string>>(new Set());
+  const isFirstSyncRef = useRef(true);
+  const activeTabRef = useRef(activeTab); // Track current tab for interval callbacks
+  activeTabRef.current = activeTab; // Keep in sync
+
+  // Toast helper
+  const showToast = useCallback((msg: string, type: 'error'|'success'|'info' = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev.slice(-2), { id, msg, type }]); // Keep max 3
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
 
   // Load emails by current tab from local DB
   const loadEmails = async (tab?: string) => {
     try {
-      const label = tab || activeTab;
+      const label = tab || activeTabRef.current;
       const result = await invoke<Email[]>("get_emails_by_label", { label });
       setEmails(result);
     } catch (e) {
@@ -59,21 +75,60 @@ function App() {
       return token;
     } catch (e: any) {
       const errStr = String(e);
-      // Token expired — try refreshing automatically
       if (errStr.includes("401") || errStr.includes("Unauthorized") || errStr.includes("invalid_grant")) {
         try {
           const refreshed = await invoke<AuthInfo>("refresh_access_token");
           setUserInfo(refreshed);
           setAccessToken(refreshed.access_token);
-          // Retry sync with new token
+          setTokenExpired(false);
           await invoke("sync_emails", { accessToken: refreshed.access_token });
           return refreshed.access_token;
         } catch {
-          console.error("Token refresh failed during sync");
+          setTokenExpired(true);
+          showToast("Oturum süresi doldu. Tekrar giriş yapın.", "error");
           throw e;
         }
       }
       throw e;
+    }
+  };
+
+  // Fetch inbox unread count (always from DB, regardless of active tab)
+  const refreshUnreadCount = async () => {
+    try {
+      const count = await invoke<number>("get_inbox_unread_count");
+      setInboxUnread(count);
+      return count;
+    } catch { return 0; }
+  };
+
+  // Send individual OS notification per new email (Outlook-style)
+  const notifyNewEmails = async (newEmails: Email[]) => {
+    if (newEmails.length === 0) return;
+    try {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const perm = await requestPermission();
+        granted = perm === 'granted';
+      }
+      if (!granted) return;
+
+      // Send one notification per new email (max 3 to avoid spam)
+      for (const email of newEmails.slice(0, 3)) {
+        const senderName = email.sender.split('<')[0].replace(/"/g, '').trim() || email.sender;
+        sendNotification({
+          title: senderName,
+          body: email.subject || email.snippet,
+        });
+      }
+      if (newEmails.length > 3) {
+        sendNotification({
+          title: `+${newEmails.length - 3} e-posta daha`,
+          body: 'Gelen kutunuzu kontrol edin.',
+        });
+      }
+    } catch (e) {
+      console.error("Notification error:", e);
     }
   };
 
@@ -82,9 +137,28 @@ function App() {
     try {
       setIsSyncing(true);
       await syncWithAutoRefresh(token);
-      await loadEmails(); // Refresh list with new data
+
+      // Fetch latest inbox emails to detect new ones
+      const freshInbox = await invoke<Email[]>("get_emails_by_label", { label: "inbox" });
+      
+      // Find genuinely new unread emails
+      const newUnreadEmails = freshInbox.filter(
+        e => e.unread && !knownEmailIdsRef.current.has(e.id)
+      );
+
+      // Update known IDs
+      knownEmailIdsRef.current = new Set(freshInbox.map(e => e.id));
+
+      // Only notify after first sync is done (don't spam old emails)
+      if (isFirstSyncRef.current) {
+        isFirstSyncRef.current = false; // Next sync will notify
+      } else {
+        notifyNewEmails(newUnreadEmails);
+      }
+
+      await loadEmails();
+      await refreshUnreadCount();
     } catch (e) {
-      // Offline or API error — local cache still works
       console.error("Background sync failed (offline?):", e);
     }
     setIsSyncing(false);
@@ -93,6 +167,7 @@ function App() {
   useEffect(() => {
     // 1. Show cached emails instantly
     loadEmails();
+    refreshUnreadCount();
     
     // 2. Check auth and auto-sync
     invoke<AuthInfo | null>("get_auth_info").then(async info => {
@@ -100,7 +175,6 @@ function App() {
         setUserInfo(info);
         setAccessToken(info.access_token);
 
-        // 3. Try to refresh token silently
         let activeToken = info.access_token;
         try {
           const refreshed = await invoke<AuthInfo>("refresh_access_token");
@@ -111,8 +185,13 @@ function App() {
           console.log("Token refresh skipped, using existing token");
         }
 
-        // 4. Auto-sync with Gmail in background
+        // Auto-sync
         backgroundSync(activeToken);
+
+        // Start polling every 15 seconds (fast for verification codes)
+        syncIntervalRef.current = setInterval(() => {
+          backgroundSync(activeToken);
+        }, 15_000);
       }
     }).catch(console.error);
 
@@ -127,12 +206,16 @@ function App() {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    };
   }, []);
 
   // Re-fetch when tab changes
   useEffect(() => {
     loadEmails(activeTab);
+    refreshUnreadCount();
   }, [activeTab]);
 
   async function loginWithGoogle() {
@@ -147,10 +230,14 @@ function App() {
       await invoke("sync_emails", { accessToken: res.access_token });
       setIsSyncing(false);
       setAuthStatus("Sync complete!");
+      setTokenExpired(false);
       loadEmails();
+      refreshUnreadCount();
+      showToast("Giriş başarılı!", "success");
     } catch (e) {
       setAuthStatus("Error: " + e);
       setIsSyncing(false);
+      showToast("Giriş başarısız: " + e, "error");
     }
   }
 
@@ -176,9 +263,10 @@ function App() {
     try {
       await invoke("sync_emails", { accessToken });
       await loadEmails();
-      setAuthStatus("Sync complete!");
+      await refreshUnreadCount();
+      showToast("Mailler güncellendi", "success");
     } catch (e) {
-      setAuthStatus("Error: " + e);
+      showToast("Senkronizasyon hatası", "error");
     }
     setIsSyncing(false);
   };
@@ -208,8 +296,8 @@ function App() {
     try {
       await invoke("archive_email", { accessToken, messageId: emailId });
     } catch (e) {
-      console.error("Archive failed:", e);
-      loadEmails(); // Revert on error
+      showToast("Arşivleme başarısız", "error");
+      loadEmails();
     }
   };
 
@@ -221,7 +309,7 @@ function App() {
     try {
       await invoke("trash_email", { accessToken, messageId: emailId });
     } catch (e) {
-      console.error("Trash failed:", e);
+      showToast("Silme başarısız", "error");
       loadEmails();
     }
   };
@@ -245,7 +333,7 @@ function App() {
       setReplyText("");
       setShowReply(false);
     } catch (e) {
-      console.error("Reply failed:", e);
+      showToast("Yanıt gönderilemedi", "error");
     }
     setIsSending(false);
   };
@@ -265,7 +353,7 @@ function App() {
       setComposeSubject("");
       setComposeBody("");
     } catch (e) {
-      console.error("Send failed:", e);
+      showToast("Gönderim başarısız", "error");
     }
     setIsSending(false);
   };
@@ -294,7 +382,26 @@ function App() {
       email.snippet.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  const unreadCount = emails.filter(e => e.unread).length;
+  const unreadCount = inboxUnread;
+
+  // Detect verification/login codes in email content
+  const detectVerificationCode = (email: Email | undefined): string | null => {
+    if (!email) return null;
+    const textToSearch = `${email.subject} ${email.snippet} ${email.body_html}`;
+    // Common patterns: "code is 123456", "kod: 123456", "doğrulama kodu: 123456", standalone 4-8 digit codes near keywords
+    const patterns = [
+      /(?:code|kod|kodu|verification|doğrulama|onay|şifre|password|pin|otp)[:\s\-]*(\d{4,8})/i,
+      /(\d{4,8})\s*(?:is your|kodunuz|doğrulama)/i,
+      /(?:enter|girin|kullanın)[:\s]*(\d{4,8})/i,
+    ];
+    for (const pattern of patterns) {
+      const match = textToSearch.match(pattern);
+      if (match?.[1]) return match[1];
+    }
+    return null;
+  };
+
+  const verificationCode = detectVerificationCode(activeMail);
 
   return (
     <div className="flex flex-col h-screen bg-[#09090b] text-zinc-300 font-sans overflow-hidden select-none">
@@ -550,9 +657,35 @@ function App() {
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col">
-              <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col">
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col" style={{ minHeight: 0 }}>
+              <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col" style={{ minHeight: 0 }}>
                 <h1 className="text-xl font-bold text-zinc-100 mb-5 shrink-0">{activeMail.subject}</h1>
+                
+                {/* Verification Code Banner */}
+                {verificationCode && (
+                  <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-lg bg-blue-500/10 border border-blue-500/20 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <ShieldAlert className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-blue-400/70 font-medium">Doğrulama Kodu</div>
+                        <div className="text-lg font-bold text-blue-300 tracking-[0.3em] font-mono">{verificationCode}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(verificationCode);
+                        showToast("Kod kopyalandı!", "success");
+                      }}
+                      className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white text-xs font-semibold transition-colors flex items-center gap-2"
+                    >
+                      <Command className="w-3 h-3" />
+                      Kopyala
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between mb-5 pb-5 border-b border-white/5 shrink-0">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -579,7 +712,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="flex-1 bg-white rounded-lg overflow-hidden">
+                <div className="flex-1 flex flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
                   <iframe
                     srcDoc={`
                       <!DOCTYPE html>
@@ -587,9 +720,16 @@ function App() {
                         <head>
                           <base target="_blank" href="https://mail.google.com/">
                           <style>
-                            body { margin: 0; padding: 1rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; word-wrap: break-word; font-size: 14px; line-height: 1.6; color: #1a1a1a; }
-                            img { max-width: 100%; height: auto; }
+                            * { box-sizing: border-box; }
+                            html, body { height: 100%; margin: 0; }
+                            body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1a1a1a; overflow-y: auto; }
+                            img { max-width: 100% !important; height: auto !important; }
                             a { color: #2563eb; }
+                            /* Custom scrollbar matching app theme */
+                            ::-webkit-scrollbar { width: 5px; }
+                            ::-webkit-scrollbar-track { background: transparent; }
+                            ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 10px; }
+                            ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
                           </style>
                         </head>
                         <body>
@@ -598,8 +738,7 @@ function App() {
                       </html>
                     `}
                     sandbox="allow-popups allow-popups-to-escape-sandbox"
-                    className="w-full border-none min-h-[400px]"
-                    style={{ flex: 1 }}
+                    className="w-full border-none flex-1"
                     title="Email Body"
                   />
                 </div>
@@ -652,6 +791,40 @@ function App() {
             </div>
           </main>
         )}
+      </div>
+
+      {/* Token expired banner */}
+      {tokenExpired && (
+        <div className="absolute top-9 left-0 right-0 bg-red-500/90 backdrop-blur-sm px-4 py-2 flex items-center justify-between z-50">
+          <div className="flex items-center gap-2 text-white text-xs font-medium">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Oturum süresi doldu. Tekrar giriş yapın.
+          </div>
+          <button 
+            onClick={loginWithGoogle}
+            className="px-3 py-1 bg-white text-red-600 text-xs font-semibold rounded hover:bg-red-50 transition-colors"
+          >
+            Giriş Yap
+          </button>
+        </div>
+      )}
+
+      {/* Toast notifications */}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(toast => (
+          <div 
+            key={toast.id}
+            className={`pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium backdrop-blur-md animate-[slideIn_0.3s_ease] ${
+              toast.type === 'error' ? 'bg-red-500/90 text-white' :
+              toast.type === 'success' ? 'bg-emerald-500/90 text-white' :
+              'bg-zinc-800/90 text-zinc-200 border border-white/10'
+            }`}
+          >
+            {toast.type === 'error' && <XCircle className="w-3.5 h-3.5 shrink-0" />}
+            {toast.type === 'success' && <CheckCircle className="w-3.5 h-3.5 shrink-0" />}
+            {toast.msg}
+          </div>
+        ))}
       </div>
     </div>
   );

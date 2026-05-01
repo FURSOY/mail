@@ -2,15 +2,19 @@ mod auth;
 mod db;
 mod gmail;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+use std::sync::Mutex;
+
+/// Global sync lock — prevents concurrent syncs from corrupting the database
+pub struct SyncState {
+    pub is_syncing: Mutex<bool>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(SyncState {
+            is_syncing: Mutex::new(false),
+        })
         .setup(|app| {
             // Load .env file for OAuth credentials
             let _ = dotenvy::dotenv();
@@ -20,12 +24,13 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
-            greet, 
             auth::start_google_oauth,
             auth::refresh_access_token,
             db::get_local_emails,
             db::get_emails_by_label,
+            db::get_inbox_unread_count,
             db::get_auth_info,
             db::logout,
             gmail::sync_emails,

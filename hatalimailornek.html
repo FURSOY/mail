@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<!-- saved from url=(0022)http://localhost:1420/ -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
+injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;</script>
+
+    <script type="module" src="./hatalimailornek_files/client"></script>
+
+    
+    <link rel="icon" type="image/svg+xml" href="http://localhost:1420/vite.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tauri + React + Typescript</title>
+  <style type="text/css" data-vite-dev-id="C:/Projects/mail/src/index.css">*, ::before, ::after {
+  --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ;
+}
+
+::backdrop {
+  --tw-border-spacing-x: 0;
+  --tw-border-spacing-y: 0;
+  --tw-translate-x: 0;
+  --tw-translate-y: 0;
+  --tw-rotate: 0;
+  --tw-skew-x: 0;
+  --tw-skew-y: 0;
+  --tw-scale-x: 1;
+  --tw-scale-y: 1;
+  --tw-pan-x:  ;
+  --tw-pan-y:  ;
+  --tw-pinch-zoom:  ;
+  --tw-scroll-snap-strictness: proximity;
+  --tw-gradient-from-position:  ;
+  --tw-gradient-via-position:  ;
+  --tw-gradient-to-position:  ;
+  --tw-ordinal:  ;
+  --tw-slashed-zero:  ;
+  --tw-numeric-figure:  ;
+  --tw-numeric-spacing:  ;
+  --tw-numeric-fraction:  ;
+  --tw-ring-inset:  ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+  --tw-shadow-colored: 0 0 #0000;
+  --tw-blur:  ;
+  --tw-brightness:  ;
+  --tw-contrast:  ;
+  --tw-grayscale:  ;
+  --tw-hue-rotate:  ;
+  --tw-invert:  ;
+  --tw-saturate:  ;
+  --tw-sepia:  ;
+  --tw-drop-shadow:  ;
+  --tw-backdrop-blur:  ;
+  --tw-backdrop-brightness:  ;
+  --tw-backdrop-contrast:  ;
+  --tw-backdrop-grayscale:  ;
+  --tw-backdrop-hue-rotate:  ;
+  --tw-backdrop-invert:  ;
+  --tw-backdrop-opacity:  ;
+  --tw-backdrop-saturate:  ;
+  --tw-backdrop-sepia:  ;
+  --tw-contain-size:  ;
+  --tw-contain-layout:  ;
+  --tw-contain-paint:  ;
+  --tw-contain-style:  ;
+}/*
+! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com
+*//*
+1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)
+2. Allow adding a border to an element by just adding a border-width. (https://github.com/tailwindcss/tailwindcss/pull/116)
+*/
+
+*,
+::before,
+::after {
+  box-sizing: border-box; /* 1 */
+  border-width: 0; /* 2 */
+  border-style: solid; /* 2 */
+  border-color: #e5e7eb; /* 2 */
+}
+
+::before,
+::after {
+  --tw-content: '';
+}
+
+/*
+1. Use a consistent sensible line-height in all browsers.
+2. Prevent adjustments of font size after orientation changes in iOS.
+3. Use a more readable tab size.
+4. Use the user's configured `sans` font-family by default.
+5. Use the user's configured `sans` font-feature-settings by default.
+6. Use the user's configured `sans` font-variation-settings by default.
+7. Disable tap highlights on iOS
+*/
+
+html,
+:host {
+  line-height: 1.5; /* 1 */
+  -webkit-text-size-adjust: 100%; /* 2 */
+  -moz-tab-size: 4; /* 3 */
+  -o-tab-size: 4;
+     tab-size: 4; /* 3 */
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; /* 4 */
+  font-feature-settings: normal; /* 5 */
+  font-variation-settings: normal; /* 6 */
+  -webkit-tap-highlight-color: transparent; /* 7 */
+}
+
+/*
+1. Remove the margin in all browsers.
+2. Inherit line-height from `html` so users can set them as a class directly on the `html` element.
+*/
+
+body {
+  margin: 0; /* 1 */
+  line-height: inherit; /* 2 */
+}
+
+/*
+1. Add the correct height in Firefox.
+2. Correct the inheritance of border color in Firefox. (https://bugzilla.mozilla.org/show_bug.cgi?id=190655)
+3. Ensure horizontal rules are visible by default.
+*/
+
+hr {
+  height: 0; /* 1 */
+  color: inherit; /* 2 */
+  border-top-width: 1px; /* 3 */
+}
+
+/*
+Add the correct text decoration in Chrome, Edge, and Safari.
+*/
+
+abbr:where([title]) {
+  -webkit-text-decoration: underline dotted;
+          text-decoration: underline dotted;
+}
+
+/*
+Remove the default font size and weight for headings.
+*/
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/*
+Reset links to optimize for opt-in styling instead of opt-out.
+*/
+
+a {
+  color: inherit;
+  text-decoration: inherit;
+}
+
+/*
+Add the correct font weight in Edge and Safari.
+*/
+
+b,
+strong {
+  font-weight: bolder;
+}
+
+/*
+1. Use the user's configured `mono` font-family by default.
+2. Use the user's configured `mono` font-feature-settings by default.
+3. Use the user's configured `mono` font-variation-settings by default.
+4. Correct the odd `em` font sizing in all browsers.
+*/
+
+code,
+kbd,
+samp,
+pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; /* 1 */
+  font-feature-settings: normal; /* 2 */
+  font-variation-settings: normal; /* 3 */
+  font-size: 1em; /* 4 */
+}
+
+/*
+Add the correct font size in all browsers.
+*/
+
+small {
+  font-size: 80%;
+}
+
+/*
+Prevent `sub` and `sup` elements from affecting the line height in all browsers.
+*/
+
+sub,
+sup {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+sub {
+  bottom: -0.25em;
+}
+
+sup {
+  top: -0.5em;
+}
+
+/*
+1. Remove text indentation from table contents in Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
+2. Correct table border color inheritance in all Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
+3. Remove gaps between table borders by default.
+*/
+
+table {
+  text-indent: 0; /* 1 */
+  border-color: inherit; /* 2 */
+  border-collapse: collapse; /* 3 */
+}
+
+/*
+1. Change the font styles in all browsers.
+2. Remove the margin in Firefox and Safari.
+3. Remove default padding in all browsers.
+*/
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit; /* 1 */
+  font-feature-settings: inherit; /* 1 */
+  font-variation-settings: inherit; /* 1 */
+  font-size: 100%; /* 1 */
+  font-weight: inherit; /* 1 */
+  line-height: inherit; /* 1 */
+  letter-spacing: inherit; /* 1 */
+  color: inherit; /* 1 */
+  margin: 0; /* 2 */
+  padding: 0; /* 3 */
+}
+
+/*
+Remove the inheritance of text transform in Edge and Firefox.
+*/
+
+button,
+select {
+  text-transform: none;
+}
+
+/*
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Remove default button styles.
+*/
+
+button,
+input:where([type='button']),
+input:where([type='reset']),
+input:where([type='submit']) {
+  -webkit-appearance: button; /* 1 */
+  background-color: transparent; /* 2 */
+  background-image: none; /* 2 */
+}
+
+/*
+Use the modern Firefox focus style for all focusable elements.
+*/
+
+:-moz-focusring {
+  outline: auto;
+}
+
+/*
+Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
+*/
+
+:-moz-ui-invalid {
+  box-shadow: none;
+}
+
+/*
+Add the correct vertical alignment in Chrome and Firefox.
+*/
+
+progress {
+  vertical-align: baseline;
+}
+
+/*
+Correct the cursor style of increment and decrement buttons in Safari.
+*/
+
+::-webkit-inner-spin-button,
+::-webkit-outer-spin-button {
+  height: auto;
+}
+
+/*
+1. Correct the odd appearance in Chrome and Safari.
+2. Correct the outline style in Safari.
+*/
+
+[type='search'] {
+  -webkit-appearance: textfield; /* 1 */
+  outline-offset: -2px; /* 2 */
+}
+
+/*
+Remove the inner padding in Chrome and Safari on macOS.
+*/
+
+::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+/*
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Change font properties to `inherit` in Safari.
+*/
+
+::-webkit-file-upload-button {
+  -webkit-appearance: button; /* 1 */
+  font: inherit; /* 2 */
+}
+
+/*
+Add the correct display in Chrome and Safari.
+*/
+
+summary {
+  display: list-item;
+}
+
+/*
+Removes the default spacing and border for appropriate elements.
+*/
+
+blockquote,
+dl,
+dd,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+hr,
+figure,
+p,
+pre {
+  margin: 0;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+}
+
+legend {
+  padding: 0;
+}
+
+ol,
+ul,
+menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+Reset default styling for dialogs.
+*/
+dialog {
+  padding: 0;
+}
+
+/*
+Prevent resizing textareas horizontally by default.
+*/
+
+textarea {
+  resize: vertical;
+}
+
+/*
+1. Reset the default placeholder opacity in Firefox. (https://github.com/tailwindlabs/tailwindcss/issues/3300)
+2. Set the default placeholder color to the user's configured gray 400 color.
+*/
+
+input::-moz-placeholder, textarea::-moz-placeholder {
+  opacity: 1; /* 1 */
+  color: #9ca3af; /* 2 */
+}
+
+input::placeholder,
+textarea::placeholder {
+  opacity: 1; /* 1 */
+  color: #9ca3af; /* 2 */
+}
+
+/*
+Set the default cursor for buttons.
+*/
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+/*
+Make sure disabled buttons don't get the pointer cursor.
+*/
+:disabled {
+  cursor: default;
+}
+
+/*
+1. Make replaced elements `display: block` by default. (https://github.com/mozdevs/cssremedy/issues/14)
+2. Add `vertical-align: middle` to align replaced elements more sensibly by default. (https://github.com/jensimmons/cssremedy/issues/14#issuecomment-634934210)
+   This can trigger a poorly considered lint error in some tools but is included by design.
+*/
+
+img,
+svg,
+video,
+canvas,
+audio,
+iframe,
+embed,
+object {
+  display: block; /* 1 */
+  vertical-align: middle; /* 2 */
+}
+
+/*
+Constrain images and videos to the parent width and preserve their intrinsic aspect ratio. (https://github.com/mozdevs/cssremedy/issues/14)
+*/
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Make elements with the HTML hidden attribute stay hidden by default */
+[hidden]:where(:not([hidden="until-found"])) {
+  display: none;
+}
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif
+  }
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0)
+  }
+  * {
+  border-color: var(--border);
+}
+  body {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+  html {
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+.pointer-events-none {
+  pointer-events: none;
+}
+.pointer-events-auto {
+  pointer-events: auto;
+}
+.fixed {
+  position: fixed;
+}
+.absolute {
+  position: absolute;
+}
+.relative {
+  position: relative;
+}
+.inset-0 {
+  inset: 0px;
+}
+.bottom-4 {
+  bottom: 1rem;
+}
+.bottom-6 {
+  bottom: 1.5rem;
+}
+.left-0 {
+  left: 0px;
+}
+.left-1 {
+  left: 0.25rem;
+}
+.left-2\.5 {
+  left: 0.625rem;
+}
+.right-0 {
+  right: 0px;
+}
+.right-2 {
+  right: 0.5rem;
+}
+.right-4 {
+  right: 1rem;
+}
+.right-6 {
+  right: 1.5rem;
+}
+.top-1\/2 {
+  top: 50%;
+}
+.top-4 {
+  top: 1rem;
+}
+.top-9 {
+  top: 2.25rem;
+}
+.z-10 {
+  z-index: 10;
+}
+.z-50 {
+  z-index: 50;
+}
+.z-\[100\] {
+  z-index: 100;
+}
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+.my-2 {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.mb-0\.5 {
+  margin-bottom: 0.125rem;
+}
+.mb-3 {
+  margin-bottom: 0.75rem;
+}
+.mb-4 {
+  margin-bottom: 1rem;
+}
+.mb-5 {
+  margin-bottom: 1.25rem;
+}
+.ml-auto {
+  margin-left: auto;
+}
+.mt-0\.5 {
+  margin-top: 0.125rem;
+}
+.mt-1 {
+  margin-top: 0.25rem;
+}
+.mt-4 {
+  margin-top: 1rem;
+}
+.mt-auto {
+  margin-top: auto;
+}
+.block {
+  display: block;
+}
+.flex {
+  display: flex;
+}
+.inline-flex {
+  display: inline-flex;
+}
+.table {
+  display: table;
+}
+.hidden {
+  display: none;
+}
+.size-3 {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.size-3\.5 {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.size-4 {
+  width: 1rem;
+  height: 1rem;
+}
+.size-6 {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.size-7 {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+.size-8 {
+  width: 2rem;
+  height: 2rem;
+}
+.size-9 {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+.h-1\.5 {
+  height: 0.375rem;
+}
+.h-12 {
+  height: 3rem;
+}
+.h-14 {
+  height: 3.5rem;
+}
+.h-2\.5 {
+  height: 0.625rem;
+}
+.h-3 {
+  height: 0.75rem;
+}
+.h-3\.5 {
+  height: 0.875rem;
+}
+.h-4 {
+  height: 1rem;
+}
+.h-5 {
+  height: 1.25rem;
+}
+.h-6 {
+  height: 1.5rem;
+}
+.h-7 {
+  height: 1.75rem;
+}
+.h-8 {
+  height: 2rem;
+}
+.h-9 {
+  height: 2.25rem;
+}
+.h-screen {
+  height: 100vh;
+}
+.min-h-\[120px\] {
+  min-height: 120px;
+}
+.min-h-\[200px\] {
+  min-height: 200px;
+}
+.w-1\.5 {
+  width: 0.375rem;
+}
+.w-11 {
+  width: 2.75rem;
+}
+.w-12 {
+  width: 3rem;
+}
+.w-14 {
+  width: 3.5rem;
+}
+.w-2\.5 {
+  width: 0.625rem;
+}
+.w-3 {
+  width: 0.75rem;
+}
+.w-3\.5 {
+  width: 0.875rem;
+}
+.w-4 {
+  width: 1rem;
+}
+.w-5 {
+  width: 1.25rem;
+}
+.w-56 {
+  width: 14rem;
+}
+.w-7 {
+  width: 1.75rem;
+}
+.w-8 {
+  width: 2rem;
+}
+.w-9 {
+  width: 2.25rem;
+}
+.w-full {
+  width: 100%;
+}
+.min-w-0 {
+  min-width: 0px;
+}
+.min-w-\[18px\] {
+  min-width: 18px;
+}
+.max-w-3xl {
+  max-width: 48rem;
+}
+.max-w-lg {
+  max-width: 32rem;
+}
+.flex-1 {
+  flex: 1 1 0%;
+}
+.shrink-0 {
+  flex-shrink: 0;
+}
+.-translate-y-1\/2 {
+  --tw-translate-y: -50%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+.animate-\[slideIn_0\.3s_ease\] {
+  animation: slideIn 0.3s ease;
+}
+@keyframes pulse {
+
+  50% {
+    opacity: .5;
+  }
+}
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes spin {
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+.cursor-pointer {
+  cursor: pointer;
+}
+.select-none {
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
+}
+.select-text {
+  -webkit-user-select: text;
+     -moz-user-select: text;
+          user-select: text;
+}
+.resize-none {
+  resize: none;
+}
+.flex-col {
+  flex-direction: column;
+}
+.items-center {
+  align-items: center;
+}
+.items-baseline {
+  align-items: baseline;
+}
+.justify-center {
+  justify-content: center;
+}
+.justify-between {
+  justify-content: space-between;
+}
+.gap-0\.5 {
+  gap: 0.125rem;
+}
+.gap-1 {
+  gap: 0.25rem;
+}
+.gap-1\.5 {
+  gap: 0.375rem;
+}
+.gap-2 {
+  gap: 0.5rem;
+}
+.gap-2\.5 {
+  gap: 0.625rem;
+}
+.gap-3 {
+  gap: 0.75rem;
+}
+.space-y-0\.5 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.125rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.125rem * var(--tw-space-y-reverse));
+}
+.space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.75rem * var(--tw-space-y-reverse));
+}
+.overflow-hidden {
+  overflow: hidden;
+}
+.overflow-y-auto {
+  overflow-y: auto;
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.whitespace-nowrap {
+  white-space: nowrap;
+}
+.rounded {
+  border-radius: 0.25rem;
+}
+.rounded-2xl {
+  border-radius: 1rem;
+}
+.rounded-\[min\(var\(--radius-md\)\2c 10px\)\] {
+  border-radius: min(var(--radius-md), 10px);
+}
+.rounded-\[min\(var\(--radius-md\)\2c 12px\)\] {
+  border-radius: min(var(--radius-md), 12px);
+}
+.rounded-full {
+  border-radius: 9999px;
+}
+.rounded-lg {
+  border-radius: var(--radius);
+}
+.rounded-md {
+  border-radius: calc(var(--radius) - 2px);
+}
+.rounded-xl {
+  border-radius: 0.75rem;
+}
+.border {
+  border-width: 1px;
+}
+.border-b {
+  border-bottom-width: 1px;
+}
+.border-l-2 {
+  border-left-width: 2px;
+}
+.border-r {
+  border-right-width: 1px;
+}
+.border-t {
+  border-top-width: 1px;
+}
+.border-none {
+  border-style: none;
+}
+.border-blue-500\/20 {
+  border-color: rgb(59 130 246 / 0.2);
+}
+.border-border {
+  border-color: var(--border);
+}
+.border-transparent {
+  border-color: transparent;
+}
+.border-white\/10 {
+  border-color: rgb(255 255 255 / 0.1);
+}
+.border-white\/5 {
+  border-color: rgb(255 255 255 / 0.05);
+}
+.border-white\/\[0\.03\] {
+  border-color: rgb(255 255 255 / 0.03);
+}
+.border-l-blue-500 {
+  --tw-border-opacity: 1;
+  border-left-color: rgb(59 130 246 / var(--tw-border-opacity, 1));
+}
+.border-l-transparent {
+  border-left-color: transparent;
+}
+.bg-\[\#09090b\] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(9 9 11 / var(--tw-bg-opacity, 1));
+}
+.bg-\[\#0a0a0c\] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(10 10 12 / var(--tw-bg-opacity, 1));
+}
+.bg-\[\#0c0c0e\] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(12 12 14 / var(--tw-bg-opacity, 1));
+}
+.bg-\[\#111113\] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(17 17 19 / var(--tw-bg-opacity, 1));
+}
+.bg-background {
+  background-color: var(--background);
+}
+.bg-black\/60 {
+  background-color: rgb(0 0 0 / 0.6);
+}
+.bg-blue-500 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(59 130 246 / var(--tw-bg-opacity, 1));
+}
+.bg-blue-500\/10 {
+  background-color: rgb(59 130 246 / 0.1);
+}
+.bg-blue-500\/20 {
+  background-color: rgb(59 130 246 / 0.2);
+}
+.bg-emerald-500\/90 {
+  background-color: rgb(16 185 129 / 0.9);
+}
+.bg-primary {
+  background-color: var(--primary);
+}
+.bg-red-500\/90 {
+  background-color: rgb(239 68 68 / 0.9);
+}
+.bg-secondary {
+  background-color: var(--secondary);
+}
+.bg-transparent {
+  background-color: transparent;
+}
+.bg-white {
+  --tw-bg-opacity: 1;
+  background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
+}
+.bg-white\/10 {
+  background-color: rgb(255 255 255 / 0.1);
+}
+.bg-white\/\[0\.02\] {
+  background-color: rgb(255 255 255 / 0.02);
+}
+.bg-white\/\[0\.03\] {
+  background-color: rgb(255 255 255 / 0.03);
+}
+.bg-zinc-800 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(39 39 42 / var(--tw-bg-opacity, 1));
+}
+.bg-zinc-800\/90 {
+  background-color: rgb(39 39 42 / 0.9);
+}
+.bg-gradient-to-tr {
+  background-image: linear-gradient(to top right, var(--tw-gradient-stops));
+}
+.from-blue-500 {
+  --tw-gradient-from: #3b82f6 var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(59 130 246 / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+.to-purple-500 {
+  --tw-gradient-to: #a855f7 var(--tw-gradient-to-position);
+}
+.bg-clip-padding {
+  background-clip: padding-box;
+}
+.object-cover {
+  -o-object-fit: cover;
+     object-fit: cover;
+}
+.p-0\.5 {
+  padding: 0.125rem;
+}
+.p-1 {
+  padding: 0.25rem;
+}
+.p-1\.5 {
+  padding: 0.375rem;
+}
+.p-2 {
+  padding: 0.5rem;
+}
+.p-4 {
+  padding: 1rem;
+}
+.p-6 {
+  padding: 1.5rem;
+}
+.p-8 {
+  padding: 2rem;
+}
+.px-1 {
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+.px-2 {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+.px-2\.5 {
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+}
+.px-3 {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+.px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+.px-5 {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+.py-0\.5 {
+  padding-top: 0.125rem;
+  padding-bottom: 0.125rem;
+}
+.py-1 {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+.py-1\.5 {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+.py-2 {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.py-2\.5 {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+.py-3 {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+.pb-5 {
+  padding-bottom: 1.25rem;
+}
+.pl-1 {
+  padding-left: 0.25rem;
+}
+.pl-2 {
+  padding-left: 0.5rem;
+}
+.pl-8 {
+  padding-left: 2rem;
+}
+.pr-0 {
+  padding-right: 0px;
+}
+.pr-7 {
+  padding-right: 1.75rem;
+}
+.pt-3 {
+  padding-top: 0.75rem;
+}
+.text-center {
+  text-align: center;
+}
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.font-sans {
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+.text-\[0\.8rem\] {
+  font-size: 0.8rem;
+}
+.text-\[10px\] {
+  font-size: 10px;
+}
+.text-\[11px\] {
+  font-size: 11px;
+}
+.text-lg {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+.text-sm {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.text-xl {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+.text-xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.font-bold {
+  font-weight: 700;
+}
+.font-medium {
+  font-weight: 500;
+}
+.font-semibold {
+  font-weight: 600;
+}
+.uppercase {
+  text-transform: uppercase;
+}
+.capitalize {
+  text-transform: capitalize;
+}
+.tracking-\[0\.3em\] {
+  letter-spacing: 0.3em;
+}
+.tracking-wider {
+  letter-spacing: 0.05em;
+}
+.text-blue-300 {
+  --tw-text-opacity: 1;
+  color: rgb(147 197 253 / var(--tw-text-opacity, 1));
+}
+.text-blue-400 {
+  --tw-text-opacity: 1;
+  color: rgb(96 165 250 / var(--tw-text-opacity, 1));
+}
+.text-blue-400\/70 {
+  color: rgb(96 165 250 / 0.7);
+}
+.text-blue-500 {
+  --tw-text-opacity: 1;
+  color: rgb(59 130 246 / var(--tw-text-opacity, 1));
+}
+.text-destructive {
+  color: var(--destructive);
+}
+.text-primary {
+  color: var(--primary);
+}
+.text-primary-foreground {
+  color: var(--primary-foreground);
+}
+.text-red-600 {
+  --tw-text-opacity: 1;
+  color: rgb(220 38 38 / var(--tw-text-opacity, 1));
+}
+.text-secondary-foreground {
+  color: var(--secondary-foreground);
+}
+.text-white {
+  --tw-text-opacity: 1;
+  color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+}
+.text-zinc-100 {
+  --tw-text-opacity: 1;
+  color: rgb(244 244 245 / var(--tw-text-opacity, 1));
+}
+.text-zinc-200 {
+  --tw-text-opacity: 1;
+  color: rgb(228 228 231 / var(--tw-text-opacity, 1));
+}
+.text-zinc-300 {
+  --tw-text-opacity: 1;
+  color: rgb(212 212 216 / var(--tw-text-opacity, 1));
+}
+.text-zinc-400 {
+  --tw-text-opacity: 1;
+  color: rgb(161 161 170 / var(--tw-text-opacity, 1));
+}
+.text-zinc-500 {
+  --tw-text-opacity: 1;
+  color: rgb(113 113 122 / var(--tw-text-opacity, 1));
+}
+.text-zinc-600 {
+  --tw-text-opacity: 1;
+  color: rgb(82 82 91 / var(--tw-text-opacity, 1));
+}
+.text-zinc-700 {
+  --tw-text-opacity: 1;
+  color: rgb(63 63 70 / var(--tw-text-opacity, 1));
+}
+.underline-offset-4 {
+  text-underline-offset: 4px;
+}
+.opacity-0 {
+  opacity: 0;
+}
+.shadow-2xl {
+  --tw-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --tw-shadow-colored: 0 25px 50px -12px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+.shadow-lg {
+  --tw-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+.shadow-blue-500\/25 {
+  --tw-shadow-color: rgb(59 130 246 / 0.25);
+  --tw-shadow: var(--tw-shadow-colored);
+}
+.outline-none {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.outline {
+  outline-style: solid;
+}
+.blur {
+  --tw-blur: blur(8px);
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+.filter {
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+.backdrop-blur-md {
+  --tw-backdrop-blur: blur(12px);
+  backdrop-filter: var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);
+}
+.backdrop-blur-sm {
+  --tw-backdrop-blur: blur(4px);
+  backdrop-filter: var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);
+}
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+@keyframes enter {
+
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1)) rotate(var(--tw-enter-rotate, 0));
+  }
+}
+@keyframes exit {
+
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0));
+  }
+}
+
+/* Custom Scrollbar for a premium look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+.placeholder\:text-zinc-600::-moz-placeholder {
+  --tw-text-opacity: 1;
+  color: rgb(82 82 91 / var(--tw-text-opacity, 1));
+}
+.placeholder\:text-zinc-600::placeholder {
+  --tw-text-opacity: 1;
+  color: rgb(82 82 91 / var(--tw-text-opacity, 1));
+}
+.hover\:scale-105:hover {
+  --tw-scale-x: 1.05;
+  --tw-scale-y: 1.05;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+.hover\:bg-blue-400:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(96 165 250 / var(--tw-bg-opacity, 1));
+}
+.hover\:bg-blue-600:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(37 99 235 / var(--tw-bg-opacity, 1));
+}
+.hover\:bg-muted:hover {
+  background-color: var(--muted);
+}
+.hover\:bg-red-50:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 242 242 / var(--tw-bg-opacity, 1));
+}
+.hover\:bg-red-500\/80:hover {
+  background-color: rgb(239 68 68 / 0.8);
+}
+.hover\:bg-white\/10:hover {
+  background-color: rgb(255 255 255 / 0.1);
+}
+.hover\:bg-white\/5:hover {
+  background-color: rgb(255 255 255 / 0.05);
+}
+.hover\:bg-white\/\[0\.02\]:hover {
+  background-color: rgb(255 255 255 / 0.02);
+}
+.hover\:text-amber-400:hover {
+  --tw-text-opacity: 1;
+  color: rgb(251 191 36 / var(--tw-text-opacity, 1));
+}
+.hover\:text-foreground:hover {
+  color: var(--foreground);
+}
+.hover\:text-red-400:hover {
+  --tw-text-opacity: 1;
+  color: rgb(248 113 113 / var(--tw-text-opacity, 1));
+}
+.hover\:text-white:hover {
+  --tw-text-opacity: 1;
+  color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+}
+.hover\:text-zinc-200:hover {
+  --tw-text-opacity: 1;
+  color: rgb(228 228 231 / var(--tw-text-opacity, 1));
+}
+.hover\:text-zinc-300:hover {
+  --tw-text-opacity: 1;
+  color: rgb(212 212 216 / var(--tw-text-opacity, 1));
+}
+.hover\:underline:hover {
+  text-decoration-line: underline;
+}
+.focus\:border-blue-500\/40:focus {
+  border-color: rgb(59 130 246 / 0.4);
+}
+.focus\:bg-white\/\[0\.02\]:focus {
+  background-color: rgb(255 255 255 / 0.02);
+}
+.focus-visible\:border-ring:focus-visible {
+  border-color: var(--ring);
+}
+.active\:scale-95:active {
+  --tw-scale-x: .95;
+  --tw-scale-y: .95;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+.disabled\:pointer-events-none:disabled {
+  pointer-events: none;
+}
+.disabled\:opacity-20:disabled {
+  opacity: 0.2;
+}
+.disabled\:opacity-40:disabled {
+  opacity: 0.4;
+}
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+.disabled\:hover\:bg-blue-500:hover:disabled {
+  --tw-bg-opacity: 1;
+  background-color: rgb(59 130 246 / var(--tw-bg-opacity, 1));
+}
+.group:focus-within .group-focus-within\:text-blue-500 {
+  --tw-text-opacity: 1;
+  color: rgb(59 130 246 / var(--tw-text-opacity, 1));
+}
+.group:hover .group-hover\:opacity-100 {
+  opacity: 1;
+}
+.aria-expanded\:bg-muted[aria-expanded="true"] {
+  background-color: var(--muted);
+}
+.aria-expanded\:bg-secondary[aria-expanded="true"] {
+  background-color: var(--secondary);
+}
+.aria-expanded\:text-foreground[aria-expanded="true"] {
+  color: var(--foreground);
+}
+.aria-expanded\:text-secondary-foreground[aria-expanded="true"] {
+  color: var(--secondary-foreground);
+}
+.dark\:border-input:is(.dark *) {
+  border-color: var(--input);
+}
+@media (min-width: 768px) {
+
+  .md\:flex {
+    display: flex;
+  }
+
+  .md\:hidden {
+    display: none;
+  }
+
+  .md\:w-80 {
+    width: 20rem;
+  }
+
+  .md\:flex-none {
+    flex: none;
+  }
+
+  .md\:p-8 {
+    padding: 2rem;
+  }
+}
+@media (min-width: 1024px) {
+
+  .lg\:w-96 {
+    width: 24rem;
+  }
+}
+.\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-3 svg:not([class*='size-']) {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-3\.5 svg:not([class*='size-']) {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-4 svg:not([class*='size-']) {
+  width: 1rem;
+  height: 1rem;
+}
+.\[\&_svg\]\:pointer-events-none svg {
+  pointer-events: none;
+}
+.\[\&_svg\]\:shrink-0 svg {
+  flex-shrink: 0;
+}</style></head>
+
+  <body>
+    <div id="root"><div class="flex flex-col h-screen bg-[#09090b] text-zinc-300 font-sans overflow-hidden select-none"><div data-tauri-drag-region="true" class="h-9 shrink-0 flex items-center justify-between pl-2 pr-0 border-b border-white/5 bg-[#09090b]" style="app-region: drag;"><div data-tauri-drag-region="true" class="flex items-center gap-2 text-xs font-medium text-zinc-500 pl-1"><div class="w-4 h-4 rounded bg-blue-500 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-command w-2.5 h-2.5 text-white" aria-hidden="true"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"></path></svg></div><span class="text-zinc-400">MailApp</span></div><div class="flex items-center" style="app-region: no-drag;"><button class="w-11 h-9 flex items-center justify-center text-zinc-500 hover:bg-white/10 hover:text-zinc-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-minus w-4 h-4" aria-hidden="true"><path d="M5 12h14"></path></svg></button><button class="w-11 h-9 flex items-center justify-center text-zinc-500 hover:bg-white/10 hover:text-zinc-200 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square w-3 h-3" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect></svg></button><button class="w-11 h-9 flex items-center justify-center text-zinc-500 hover:bg-red-500/80 hover:text-white transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x w-4 h-4" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div></div><div class="flex flex-1 overflow-hidden"><aside class="hidden md:flex w-56 bg-[#0c0c0e] border-r border-white/5 flex-col"><nav class="flex-1 p-2 pt-3 space-y-0.5"><button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors bg-white/10 text-zinc-100"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-inbox w-4 h-4" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg> Inbox<span class="ml-auto text-[10px] bg-blue-500 text-white min-w-[18px] text-center py-0.5 px-1 rounded-full font-bold">69</span></button><button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors text-zinc-400 hover:bg-white/5 hover:text-zinc-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send w-4 h-4" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path></svg> Sent</button><button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors text-zinc-400 hover:bg-white/5 hover:text-zinc-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-archive w-4 h-4" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg> Archive</button><div class="my-2 border-t border-white/5"></div><button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors text-zinc-400 hover:bg-white/5 hover:text-zinc-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-alert w-4 h-4" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg> Spam</button><button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors text-zinc-400 hover:bg-white/5 hover:text-zinc-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 w-4 h-4" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> Trash</button></nav><div class="p-2 mt-auto"><div class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white/[0.03] border border-white/5 relative group"><img alt="Profile" class="w-7 h-7 rounded-full bg-zinc-800 object-cover shrink-0" src="./hatalimailornek_files/unnamed.webp"><div class="flex-1 min-w-0"><div class="text-xs font-medium text-zinc-300 truncate">f.soyer.2011</div><div class="text-[10px] text-zinc-600 truncate">f.soyer.2011@gmail.com</div></div><button class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-red-400 transition-all" title="Logout"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out w-3.5 h-3.5" aria-hidden="true"><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path></svg></button></div></div></aside><button class="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/25 transition-all hover:scale-105 active:scale-95" title="Compose"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pen-line w-5 h-5" aria-hidden="true"><path d="M13 21h8"></path><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path></svg></button><section class="flex flex-col border-r border-white/5 bg-[#09090b] hidden md:flex md:w-80 lg:w-96"><div class="h-12 flex items-center px-4 border-b border-white/5 justify-between shrink-0"><div class="flex items-center gap-2.5"><h2 class="font-semibold text-zinc-100 text-sm capitalize">inbox</h2></div><button class="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 transition-all disabled:opacity-20" title="Refresh"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw w-3.5 h-3.5" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></button></div><div class="p-2 border-b border-white/5"><div class="relative group"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-blue-500 transition-colors" aria-hidden="true"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg><input placeholder="Search emails... (Ctrl+K)" class="w-full bg-white/[0.03] border border-white/5 rounded-lg pl-8 pr-7 py-1.5 text-xs outline-none focus:border-blue-500/40 focus:bg-white/[0.02] transition-colors text-zinc-200 placeholder:text-zinc-600 select-text" type="text" value=""></div></div><div class="flex-1 overflow-y-auto"><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Furkan Soyer</span><span class="text-[10px] text-zinc-600 shrink-0">14:46</span></div><h3 class="text-xs truncate text-zinc-500">merhaba</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Nasılsın aga</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Furkan Soyer</span><span class="text-[10px] text-zinc-600 shrink-0">14:42</span></div><h3 class="text-xs truncate text-zinc-500">lalala</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">saffsafafsasafafssafsafsafasf</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Furkan Soyer</span><span class="text-[10px] text-zinc-600 shrink-0">13:56</span></div><h3 class="text-xs truncate text-zinc-500">dsadadas</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">sadadsadsadsad</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Furkan Soyer</span><span class="text-[10px] text-zinc-600 shrink-0">13:51</span></div><h3 class="text-xs truncate text-zinc-500">daasd</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">dasdsa</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Google</span><span class="text-[10px] text-zinc-600 shrink-0">12:33</span></div><h3 class="text-xs truncate text-zinc-500">Güvenlik uyarısı</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Microsoft apps &amp;amp; services uygulamasının Google Hesabınızdaki bazı verilere erişmesine izin verdiniz f.soyer.2011@gmail.com Microsoft apps &amp;amp; services uygulamasının Google Hesabınızdaki bazı</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Steam Store</span><span class="text-[10px] text-zinc-600 shrink-0">10:41</span></div><h3 class="text-xs truncate text-zinc-500">Topluluk Pazarı satın alımınız için teşekkürler</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Steam Sayın fursoy2011, Son Topluluk Pazarı satın alımınız tamamlandı ve 0,92 USD değerindeki tutar Steam cüzdanınızdan tahsil edildi. Bu e-posta iletisi makbuz yerine geçer. Satın alma geçmişinize</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Steam Store</span><span class="text-[10px] text-zinc-600 shrink-0">10:40</span></div><h3 class="text-xs truncate text-zinc-500">Bir öğeniz Topluluk Pazarı'nda satıldı</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Sayın fursoy2011, Bir öğeniz Topluluk Pazarı&amp;#39;nda satıldı. Steam cüzdanınıza 1.96 USD eklendi. Bu e-posta iletisi makbuz yerine geçer. Satın alma geçmişinize istediğiniz zaman çevrimiçi</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Steam Store</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Bir öğeniz Topluluk Pazarı'nda satıldı</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Sayın fursoy2011, Bir öğeniz Topluluk Pazarı&amp;#39;nda satıldı. Steam cüzdanınıza 1.94 USD eklendi. Bu e-posta iletisi makbuz yerine geçer. Satın alma geçmişinize istediğiniz zaman çevrimiçi</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Google Cloud</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-500">[Product Update] Automatic enablement of new OpenTelemetry ingestion API</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">We&amp;#39;re enabling a new OTLP ingestion API starting Jun 1, 2026. MY CONSOLE Hello FURSOY, You may have previously received a notification regarding this update. If so, please disregard this message.</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-500">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! LEGO Product Designer (Stud.io / BrickLink Specialist) – Asia &amp;amp; Europe Based ANAVRIN® Design Lab Malaysia / China / Japan Permanent</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Mini lesson - first, second, next... adverbs of sequencing</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">​ Hello everyone! ​ Today, let&amp;#39;s look at how to use adverbs for sequencing. We can use adverbs when we&amp;#39;re talking or writing to organise what we say. These adverbs usually go at the beginning</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">trsupport@midasit.com</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-500">[MIDAS IT Türkiye] 2026 Köprü Mühendisliği Semineri Daveti</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">6 Mayıs&amp;#39;ta İstanbul&amp;#39;da buluşuyoruz! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative bg-blue-500/10 border-l-2 border-l-blue-500"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Google Gemini</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-500">FURSOY, Gemini ile finallere hazırlanın</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Adım adım öğrenme, özel rehberler ve anlık geri bildirimlerle ders çalışın. ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Team Vivaldi</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Almost there! Complete your Vivaldi account setup</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Unlock the full power of Vivaldi You&amp;#39;ve taken the first step, now let&amp;#39;s make sure you get the most out of your Vivaldi account. All that&amp;#39;s left is a quick setup to make your browsing</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Naci ARSLAN (Google Slaytlar üzerinden)</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">"Tarihi İpek Yolu Sunumu" için paylaşım isteği</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Bir sunu paylaşılsın mı? Naci ARSLAN (canparem0610@gmail.com) şu sunuyla ilgili olarak erişim isteğinde bulunuyor: Tarihi İpek Yolu Sunumu Paylaşımı yönet Google LLC, 1600 Amphitheatre Parkway,</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Naci ARSLAN (Google Slaytlar üzerinden)</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Şu sunu sizinle paylaşıldı: "Adsız sunu"</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Naci ARSLAN bir sunu paylaştı Naci ARSLAN (canparem0610@gmail.com) sizi şu sunuyu düzenlemeye davet etti: Adsız sunu Aç Bu öğe şüpheli görünüyor mu? Göndereni engelleyin Google LLC, 1600 Amphitheatre</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Dribbble</span><span class="text-[10px] text-zinc-600 shrink-0">30 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">💻 Hiring a Web Agency? Read This First</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Finding the right agency is about more than just browsing portfolios—it&amp;#39;s about finding a strategic partner that understands your business goals. ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">X</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">X'e Windows işletim sisteminde ChromeDesktop üzerinden yeni giriş</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">@FURSOYS hesabına yeni bir cihazdan giriş yapıldığını fark ettik. Bu sen miydin? Yeni giriş Konum* Sincan, Türkiye Cihaz ChromeDesktop üzerinde Windows *Konum, oturum açılan IP adresine göre yaklaşık</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Epic Games</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Epic Games Makbuzun</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Epic Games Epic Games Teşekkürler. Merhaba FURKAN! Satın alımın için teşekkür ederiz! FATURA KİMLİĞİ: F5035580420 SİPARİŞ BİLGİLERİN: Sipariş ID: Faturalandırılan Kişi: F2604291949092217 f.soyer.2011@</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">♟Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">14 Günlük Seriniz Sona Ermek Üzere! 😱</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Play a quick game or Puzzle before midnight to save it! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adobe Photoshop</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New Photoshop features to speed up your work</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Switch up the perspective with Rotate Object and get organized with Layer Cleanup. ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">▶️ New video: Future perfect continuous ▶️</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">​ Hello everyone! ​ We&amp;#39;ve got a brand-new video on YouTube today! It&amp;#39;s all about the future perfect continuous (or &amp;#39;the future perfect progressive&amp;#39;)! We&amp;#39;ll look at how to make it</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Capsule artist Cutting Corner Games Linköping, E, Sweden Freelance Work Remotely View all new jobs on ArtStation Epic Games Inc. 620</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">😊 The Articles 30-Day Challenge - How to really use 'a', 'an' and 'the' (and 'some' and 'any' and 'no article')</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">It&amp;#39;s not as difficult as you think! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">no-reply@unity3d.com</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New Asset Store Notifications</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Alteruna just updated Alteruna Multiplayer Networking SDK to version 2.0.1u12. Unity Asset Store logo You Have New Notifications Alteruna just updated Alteruna Multiplayer Networking SDK to version 2.0</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chelsea with IFTTT</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">7 new services. 3 big features. Try them today. ✨</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">IFTTT MCP, DataStore, iOS Shortcuts, and all-new apps to connect! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Google Ads</span><span class="text-[10px] text-zinc-600 shrink-0">29 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Reklam ögelerinizi eklemeyi tamamlayın</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Bunu yaptıktan sonra Maksimum Performans ile kampanyanızı oluşturmaya hazır olacaksınız. Müşteri Kimliğiniz: 401-589-3117 Oturum Aç Müşteri Kimliğiniz: 401-589-3117 Oturum Aç MAKSİMUM PERFORMANS</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">♟Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">28 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">14 Günlük Seriniz Durduruldu! ⏸️</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Play a game or solve a Puzzle before midnight to keep going! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">28 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">A brand new, FREE infographic for you!</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">A gift for you! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">28 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Lead Artist / Art Director Cleo Studios Los Angeles, CA, USA Permanent Work Remotely Senior Procedural &amp;amp; Tools Engineer - Unity /</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">GitHub</span><span class="text-[10px] text-zinc-600 shrink-0">28 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[GitHub] Your Dependabot alerts for the week of Apr 21 - Apr 28</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Explore this week on GitHub GitHub security alert digest FURSOY&amp;#39;s repository security updates from the week of Apr 21 - Apr 28 FURSOY&amp;#39;s personal account FURSOY / FilmProje Known security</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Team Vivaldi</span><span class="text-[10px] text-zinc-600 shrink-0">28 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Almost there! Complete your Vivaldi account setup</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Unlock the Full Power of Vivaldi You&amp;#39;ve taken the first step, now let&amp;#39;s make sure you get the most out of your Vivaldi account. All that&amp;#39;s left is a quick setup to make your browsing</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">X</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Şifre sıfırlama isteği</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Şifren sıfırlansın mı? @FURSOYS için şifre sıfırlama isteğinde bulunduysan, aşağıdaki doğrulama kodunu kullanarak işlemi tamamla. Böyle bir istekte bulunmadıysan bu e-postayı yok sayabilirsin. 2yvixubs</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">X</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-500">X'e Android işletim sisteminde ChromeMobileAndroid üzerinden yeni giriş</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">@FURSOYS hesabına yeni bir cihazdan giriş yapıldığını fark ettik. Bu sen miydin? Yeni giriş Konum* Sincan, Türkiye Cihaz ChromeMobileAndroid üzerinde Android *Konum, oturum açılan IP adresine göre</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">14 Günlük Seriniz Devam Ediyor, FURSOY! 🔥</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Gün bitmeden hızlı bir oyun oyna veya Bulmaca çöz! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">X</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-500">X şifren değiştirildi</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">X Merhaba FURSOY, @FURSOYS hesabınla ilişkili şifreyi kısa süre önce değiştirdin. Bu değişikliğe bağlı olarak, hesabında yapılacak ek değişikliklerin geçici olarak kısıtlanabileceğini lütfen unutma.</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">X</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-500">X'e Mac işletim sisteminde ChromeDesktop üzerinden yeni giriş</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">@FURSOYS hesabına yeni bir cihazdan giriş yapıldığını fark ettik. Bu sen miydin? Yeni giriş Konum* Ciudad Autónoma de Buenos Aires, Argentina Cihaz ChromeDesktop üzerinde Mac *Konum, oturum açılan IP</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">X</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Güvenlik uyarısı: yeni veya olağan dışı X girişi</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">@FURSOYS hesabınıza şüpheli görünen bir giriş denemesi fark ettik. Bu siz miydiniz? Şüpheli giriş Konum* Ciudad Autónoma de Buenos Aires, Argentina Cihaz ChromeDesktop üzerinde Mac *Konum, oturum</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Unreal CG Asset Lead Brown Bag Films Dublin, L, Ireland Contract View all new jobs on ArtStation Epic Games Inc. 620 Crossroads</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Mini lesson - how to use articles with proper nouns</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">​ Hello everyone! ​ Today, let&amp;#39;s look at how to use articles with proper nouns. ​ Plural proper nouns usually take &amp;#39;the&amp;#39; (the Netherlands, the United States). Proper noun phrases that</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">X</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-500">X doğrulama kodun qkfw9hja</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">@FURSOYS hesabınıza şüpheli görünen bir giriş denemesi fark ettik. Bu siz miydiniz? Bu sensen, Güvenlik açısından, bu hesaba giriş yapmak için aşağıdaki tek kullanımlık kodu girerek hesaba giriş</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adobe Creative Cloud for Students</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Create standout videos with Premiere for students</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Edit everything from YouTube shorts to cinema using Adobe Creative Cloud Pro. Enhance your storytelling. Create professional-quality videos with Premiere, part of Creative Cloud Pro for students. Speed</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">I almost shipped a SQL injection on camera</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">(and other AI disasters) 👀 ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">trsupport@midasit.com</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[MIDAS IT Türkiye] 2026 Köprü Mühendisliği Semineri Daveti</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">6 Mayıs&amp;#39;ta İstanbul&amp;#39;da buluşuyoruz! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Epic Games</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Son kullanma tarihi yaklaşan Epic Ödüllerin var!</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Epic Games Store Merhaba FURSOYS, Son kullanma tarihi yaklaşan Epic Ödüllerin var! SON KULLANMA TARİHİ YAKLAŞAN ÖDÜLLER SON KULLANMA TARİHİ ₺ 0.48 04/30/2026 Biriken ödüllerini kullanmayı unutma;</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Epic Games</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Son kullanma tarihi yaklaşan Epic Ödüllerin var!</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Epic Games Store Merhaba FURSOYS, Son kullanma tarihi yaklaşan Epic Ödüllerin var! SON KULLANMA TARİHİ YAKLAŞAN ÖDÜLLER SON KULLANMA TARİHİ ₺ 0.07 04/30/2026 Biriken ödüllerini kullanmayı unutma;</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Todor - cgdive.com</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">A 1-minute survey about Gen AI content on CGDive</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Hi everyone, a quick email today. 1-minute Generative AI survey I&amp;#39;d like to really understand how the CGDive community feels about Generative AI tools. To that end, I created an extremely short</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Storytel</span><span class="text-[10px] text-zinc-600 shrink-0">27 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">     Aboneliğini hemen başlat</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Sesli kitapların dünyasına adım at ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌ ﻿ ͏ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">26 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">📈 En iyi %60'lık dilimde yer alıyorsun, FURSOY</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">14 Günlük Serinizi Tebrik Ederiz! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Mail Delivery Subsystem</span><span class="text-[10px] text-zinc-600 shrink-0">26 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Delivery Status Notification (Failure)</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Adres bulunamadı notify.railway.app alanı bulunamadığından iletiniz hello@notify.railway.app adresine teslim edilemedi. Alanda yazım hatası veya boşluk karakteri olup olmadığını kontrol edip tekrar</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">♟Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">25 Nis</span></div><h3 class="text-xs truncate text-zinc-500">13 Günlük Seriniz Durduruldu! ⏸️</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Play a game or solve a Puzzle before midnight to keep going! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Reddit</span><span class="text-[10px] text-zinc-600 shrink-0">25 Nis</span></div><h3 class="text-xs truncate text-zinc-500">220110 is your Reddit verification code</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Enter your verification code to finish signing up. 220110 If you didn&amp;#39;t make this request, you can ignore this email and carry on as usual. If you need any more help logging in to your Reddit</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Railway</span><span class="text-[10px] text-zinc-600 shrink-0">25 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Updates to Railway Terms and Policies</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Hi, We&amp;#39;ve updated the Railway Terms of Service, Privacy Policy, and Acceptable Use Policy (formerly Fair Use Policy), effective April 20, 2026. These updates refresh our privacy practices and</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Google</span><span class="text-[10px] text-zinc-600 shrink-0">25 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Güvenlik uyarısı</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Windows cihazında yeni oturum açma işlemi f.soyer.2011@gmail.com Windows cihazında Google Hesabınızda yeni bir oturum açma işlemi tespit ettik. Bu işlem size aitse herhangi bir şey yapmanız gerekmez.</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Team Vivaldi</span><span class="text-[10px] text-zinc-600 shrink-0">25 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Vivaldi Browser</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Welcome to Vivaldi! Let&amp;#39;s get you started. You&amp;#39;ve just downloaded a browser packed with powerful features and unlimited customization options. To make the most of it, here are three quick steps</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">25 Nis</span></div><h3 class="text-xs truncate text-zinc-500">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Technical Artist Playdead Copenhagen, Capital Region, Denmark Permanent Relocation assistance Artiste audio technique \ Technical Audio</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">24 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">13 Günlük Seriniz Devam Ediyor, FURSOY! 🔥</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Gün bitmeden hızlı bir oyun oyna veya Bulmaca çöz! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">24 Nis</span></div><h3 class="text-xs truncate text-zinc-500">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Lead Programmer Cleo Studios California, United States Permanent Work Remotely Senior Character Artist (Creatures) World Makers</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">24 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">What our students say about their English now :D</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">The $9 offer ends at midnight tonight ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">24 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">I optimized my company's codebase and got a raise</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">I got the raise I&amp;#39;d been waiting for two years... ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">24 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">I'm closing Day Zero tonight ⏳ </h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Last chance, then the price goes up ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Senior / Director VFX Artist (Stylized Games | Unity3D) / Europe beffio Stockholm, AB, Sweden / Warsaw, Mazovia, Poland / Madrid, MD,</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Why 'I wanted to ask you something' is more polite than 'I want to ask you something'</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">The past tense isn&amp;#39;t always about the past! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">GitHub</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[FURSOY] A security advisory on @xmldom/xmldom affects at least one of your repositories</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">1 repository in your GitHub account might be affected by a security vulnerability found in @xmldom/xmldom xmldom has XML node injection through unvalidated comment serialization High severity @xmldom/</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Ubisoft Account Updates</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Security notification regarding your Ubisoft Account</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Ubisoft logo New login location detected with your Ubisoft account: f.soyer.2011@gmail.com We have detected a login with your Ubisoft account from the following country and IP: Country/Region: United</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">GitHub</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[FURSOY] A security advisory on @xmldom/xmldom affects at least one of your repositories</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">1 repository in your GitHub account might be affected by a security vulnerability found in @xmldom/xmldom xmldom has XML node injection through unvalidated processing instruction serialization High</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">GitHub</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[FURSOY] A security advisory on @xmldom/xmldom affects at least one of your repositories</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">1 repository in your GitHub account might be affected by a security vulnerability found in @xmldom/xmldom xmldom has XML injection through unvalidated DocumentType serialization High severity @xmldom/</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">GitHub</span><span class="text-[10px] text-zinc-600 shrink-0">23 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[FURSOY] A security advisory on @xmldom/xmldom affects at least one of your repositories</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">1 repository in your GitHub account might be affected by a security vulnerability found in @xmldom/xmldom xmldom: Uncontrolled recursion in XML serialization leads to DoS High severity @xmldom/xmldom,</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">54 pages I should have read before shipping TanStack</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">This is free, grab it ⏳ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Jules</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Help us build the next version of Jules</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">We&amp;#39;re building a new version of Jules. Join the waitlist for early access. Hi! We built Jules to help developers move faster — an async coding agent working in the background and allowing you to</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">12 Günlük Seriniz Devam Ediyor, FURSOY! 🔥</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Gün bitmeden hızlı bir oyun oyna veya Bulmaca çöz! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Concepteur.trice de jeu sénior.e / Senior Game Designer - Battlefield - Montreal - 211779 Battlefield Studios Montreal, QC, Canada</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">The grammar that makes your English sound professional 📝</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Try this one small change! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">GitHub</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">[GitHub] Your Dependabot alerts for the week of Apr 15 - Apr 22</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Explore this week on GitHub GitHub security alert digest FURSOY&amp;#39;s repository security updates from the week of Apr 15 - Apr 22 FURSOY&amp;#39;s personal account FURSOY / FilmProje Known security</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Netlify</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Updating Netlify’s privacy statement</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Netlify does not use customer data for AI training. ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chelsea with IFTTT</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">AI + IFTTT? Unstoppable</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">You can now connect to IFTTT directly in Claude. Try it today. ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">InfinityFree</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Your InfinityFree profile has been deleted</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">InfinityFree Hi, We&amp;#39;re reaching out to let you know that your InfinityFree client area profile f.soyer.2011@gmail.com has been deleted due to 18 months of inactivity. As part of our commitment to</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Cloudflare</span><span class="text-[10px] text-zinc-600 shrink-0">22 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">What’s new in Cloudflare</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Explore the new AI tools and Cloudflare University. Explore the new AI tools and Cloudflare University. Cloudflare is evolving fast—here are the major highlights you might have missed. AI Gateway was</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Prisma</span><span class="text-[10px] text-zinc-600 shrink-0">21 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Important security update: Prisma Postgres credentials in Vercel</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">If your Prisma Postgres integration credentials were stored in Vercel as non-sensitive environment variables, we recommend rotating them as a precaution.‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">21 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">FURSOY, here's the gap nobody talks about</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">It&amp;#39;s not about knowing more. It&amp;#39;s about thinking differently... ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">21 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Environment Artist Cheat Code LLC United States Freelance Work Remotely 3D / Industrial Designer instinct© San Francisco, CA, USA</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">21 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">The sentence trick that makes your English sound more natural</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Move the focus like a pro ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Vercel Security</span><span class="text-[10px] text-zinc-600 shrink-0">21 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Vercel Security Update</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">We have discovered a security incident that involved unauthorized access to certain internal Vercel systems. We are actively investigating and have engaged incident response experts to help with</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Steam</span><span class="text-[10px] text-zinc-600 shrink-0">21 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Steam istek listenizde yer alan Mount &amp; Blade II: Bannerlord ve 2 ürün şimdi indirimde!</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Steam İSTEK LİSTENİZE EKLEDİĞİNİZ 3 OYUNDA TASARRUF EDİN! Mount &amp;amp;amp; Blade II: Bannerlord -50% $19.99 $9.99 USD ÖZEL PROMOSYON! Teklifin geçerlilik süresi: 27 Nis 8:00pm +03 Strateji/Aksiyon RYO.</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">20 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">10 Günlük Seriniz Devam Ediyor, FURSOY! 🔥</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Gün bitmeden hızlı bir oyun oyna veya Bulmaca çöz! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">NVIDIA GeForce</span><span class="text-[10px] text-zinc-600 shrink-0">20 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">PRAGMATA™ RTX On</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">En İyiye Yükseltin: Seçili GeForce RTX 50 Serisi ürünlerle PRAGMATA™ oyununu edinin ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏ ͏ ‍͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">20 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Build Engineer Grinding Gear Games Auckland, AUK, New Zealand Permanent Relocation assistance C++ macOS/iOS Engine Programmer Grinding</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Perfect English Grammar</span><span class="text-[10px] text-zinc-600 shrink-0">20 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">'Will' isn't only about the future (wait, what?)</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">I bet no one&amp;#39;s ever taught you this! ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adobe Creative Cloud for Students</span><span class="text-[10px] text-zinc-600 shrink-0">20 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">Students save big on Photoshop</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Get access to 20+ professional creative apps for less. Edit and enhance images. Sharpen photos, combine visuals, and work across desktop and mobile with Photoshop, part of Creative Cloud Pro for</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Google Search Console Team</span><span class="text-[10px] text-zinc-600 shrink-0">20 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">https://svdtemizlik.com/ için yeni İçerik haritaları yapılandırılmış verisi sorunları tespit edildi
+</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">https://svdtemizlik.com/ sitesinde İçerik haritaları yapılandırılmış verisi sorunları tespit edildi https://svdtemizlik.com/ sitesinin sahibine: Search Console, sitenizin 1 adet İçerik haritaları</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">18 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">The framework that finally made sense to me 🍎</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">I used to think hydration errors were my fault ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">ArtStation</span><span class="text-[10px] text-zinc-600 shrink-0">18 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">New jobs on ArtStation</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">ArtStation Hello FURSOY New jobs have been posted on ArtStation! Lead Technical / Rigging Artist Art Bully Productions Belgrade, Serbia Freelance Work Remotely Sound Designer Roy &amp;amp; Charcle Europe /</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Epic Games</span><span class="text-[10px] text-zinc-600 shrink-0">18 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">MONGIL: STAR DIVE çıktı!</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Ayrıca, daha fazla RYO macerası için bu özel oyun seçkisine göz at ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">♟Chess.com</span><span class="text-[10px] text-zinc-600 shrink-0">17 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">8 Günlük Seriniz Durduruldu! ⏸️</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Play a game or solve a Puzzle before midnight to keep going! ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌ ‌</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">Adrian | JS Mastery</span><span class="text-[10px] text-zinc-600 shrink-0">17 Nis</span></div><h3 class="text-xs truncate text-zinc-200 font-medium">NOT another Amazon clone</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Every dev has one. Here&amp;#39;s why yours should be different. ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​ ͏​</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Microsoft hesap ekibi</span><span class="text-[10px] text-zinc-600 shrink-0">17 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Microsoft hesabı güvenlik uyarısı</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Microsoft hesabı Güvenlik uyarısı f.**1@gmail.com adresli Microsoft hesabınıza başka birinin erişmiş olabileceğini düşünüyoruz. Böyle bir durumda, bir güvenlik testi uygulayarak kimliğinizi</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Microsoft hesap ekibi</span><span class="text-[10px] text-zinc-600 shrink-0">17 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Microsoft hesabı olağan dışı oturum açma etkinliği</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Microsoft hesabı Sıra dışı oturum açma etkinliği f.**1@gmail.com Microsoft hesabında kısa bir süre önce gerçekleştirilen bir oturum açma işlemiyle ilgili olağan dışı bir durum algıladık. Oturum açma</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Microsoft hesap ekibi</span><span class="text-[10px] text-zinc-600 shrink-0">17 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Microsoft hesabı olağan dışı oturum açma etkinliği</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Microsoft hesabı Sıra dışı oturum açma etkinliği f.**1@gmail.com Microsoft hesabında kısa bir süre önce gerçekleştirilen bir oturum açma işlemiyle ilgili olağan dışı bir durum algıladık. Oturum açma</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">Microsoft hesap ekibi</span><span class="text-[10px] text-zinc-600 shrink-0">17 Nis</span></div><h3 class="text-xs truncate text-zinc-500">Microsoft hesabı olağan dışı oturum açma etkinliği</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">Microsoft hesabı Sıra dışı oturum açma etkinliği f.**1@gmail.com Microsoft hesabında kısa bir süre önce gerçekleştirilen bir oturum açma işlemiyle ilgili olağan dışı bir durum algıladık. Oturum açma</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate text-zinc-400">FURSOY</span><span class="text-[10px] text-zinc-600 shrink-0">22 Ağu</span></div><h3 class="text-xs truncate text-zinc-500">Hfcvv</h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate">&amp;lt;p style=&amp;quot;background:blue&amp;quot;&amp;gt;zenci&amp;lt;/p&amp;gt;</p></div><div class="px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative hover:bg-white/[0.02] border-l-2 border-l-transparent"><div class="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div><div class="flex justify-between items-baseline mb-0.5 gap-2"><span class="text-xs truncate font-semibold text-zinc-100">FURSOY</span><span class="text-[10px] text-zinc-600 shrink-0">22 Tem</span></div><h3 class="text-xs truncate text-zinc-200 font-medium"></h3><p class="text-[11px] text-zinc-600 mt-0.5 truncate"></p></div></div></section><main class="flex-1 flex flex-col bg-[#0a0a0c] relative z-10"><div class="md:hidden h-12 flex items-center px-4 border-b border-white/5 shrink-0"><button class="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-left w-3.5 h-3.5" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path><path d="M9 14 4 9l5-5"></path></svg> Back</button></div><div class="hidden md:flex h-12 items-center justify-between px-5 border-b border-white/5 shrink-0"><div class="flex items-center gap-1.5"><span class="text-xs text-zinc-500 flex items-center gap-1.5 capitalize"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-inbox w-3.5 h-3.5" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>inbox</span></div><div class="flex items-center gap-0.5"><button class="p-2 rounded-md hover:bg-white/5 transition-colors text-zinc-400 hover:text-zinc-200" title="Reply (R)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-left w-4 h-4" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path><path d="M9 14 4 9l5-5"></path></svg></button><button class="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-amber-400 transition-colors" title="Archive (E)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-archive w-4 h-4" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg></button><button class="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-400 transition-colors" title="Delete (#)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 w-4 h-4" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></div><div class="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col" style="min-height: 0px;"><div class="max-w-3xl mx-auto w-full flex-1 flex flex-col" style="min-height: 0px;"><h1 class="text-xl font-bold text-zinc-100 mb-5 shrink-0">FURSOY, Gemini ile finallere hazırlanın</h1><div class="flex items-center justify-between mb-5 pb-5 border-b border-white/5 shrink-0"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">G</div><div><div class="text-sm font-medium text-zinc-200">Google Gemini</div><div class="text-[11px] text-zinc-600 mt-0.5">to me · 30 Nisan 2026 08:35</div></div></div><div class="flex md:hidden items-center gap-1"><button class="p-2 rounded-md hover:bg-white/5 text-zinc-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-left w-4 h-4" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path><path d="M9 14 4 9l5-5"></path></svg></button><button class="p-2 rounded-md hover:bg-white/5 text-zinc-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-archive w-4 h-4" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg></button><button class="p-2 rounded-md hover:bg-white/5 text-zinc-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2 lucide-trash-2 w-4 h-4" aria-hidden="true"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div></div><div class="flex-1 flex flex-col bg-white rounded-lg overflow-hidden" style="min-height: 0px;"><iframe sandbox="allow-popups allow-popups-to-escape-sandbox" class="w-full border-none flex-1" title="Email Body" src="./hatalimailornek_files/saved_resource.html"></iframe></div></div></div></main></div><div class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div></div></div>
+    <script type="module" src="./hatalimailornek_files/main.tsx"></script>
+  
+
+</body></html>
