@@ -37,6 +37,8 @@ pub fn run() {
             gmail::mark_as_read,
             gmail::archive_email,
             gmail::trash_email,
+            gmail::move_to_inbox,
+            gmail::permanently_delete,
             gmail::send_reply,
             gmail::send_email
         ])
