@@ -193,7 +193,7 @@ pub fn get_local_emails(app: tauri::AppHandle) -> Result<Vec<Email>, String> {
     Ok(emails)
 }
 
-pub fn mark_as_read(app: &AppHandle, id: &str) -> Result<(), String> {
+pub fn mark_email_as_read_local(app: &AppHandle, id: &str) -> Result<(), String> {
     let db_path = get_db_path(app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     

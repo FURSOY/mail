@@ -19,7 +19,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet, 
-            auth::start_google_oauth, 
+            auth::start_google_oauth,
+            auth::refresh_access_token,
             db::get_local_emails,
             db::get_emails_by_label,
             db::get_auth_info,

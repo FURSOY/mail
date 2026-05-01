@@ -3,6 +3,7 @@ use serde::Deserialize;
 use base64::Engine;
 use crate::db::{upsert_emails, Email};
 use tauri::AppHandle;
+use futures::stream::{self, StreamExt};
 
 #[derive(Deserialize, Debug)]
 struct MessageListResponse {
@@ -178,10 +179,9 @@ async fn fetch_message_detail(client: &Client, access_token: &str, msg_id: &str)
 #[tauri::command]
 pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), String> {
     let client = Client::new();
-    let mut parsed_emails = Vec::new();
+    let mut all_ids = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
-    // Helper to fetch and parse a batch
     let queries = vec![
         ("in:inbox", 50u32),
         ("in:sent", 30),
@@ -189,19 +189,33 @@ pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), Str
         ("in:trash", 20),
     ];
 
+    // Collect all unique message IDs first
     for (query, max) in queries {
         if let Ok(ids) = fetch_message_ids(&client, &access_token, query, max).await {
-            for msg in &ids {
-                if seen_ids.contains(&msg.id) {
-                    continue;
-                }
-                seen_ids.insert(msg.id.clone());
-                if let Ok(detail) = fetch_message_detail(&client, &access_token, &msg.id).await {
-                    parsed_emails.push(parse_message_detail(detail));
+            for msg in ids {
+                if seen_ids.insert(msg.id.clone()) {
+                    all_ids.push(msg.id);
                 }
             }
         }
     }
+
+    // Fetch all message details in parallel (max 10 concurrent)
+    let parsed_emails: Vec<Email> = stream::iter(all_ids)
+        .map(|id| {
+            let client = &client;
+            let token = &access_token;
+            async move {
+                fetch_message_detail(client, token, &id)
+                    .await
+                    .ok()
+                    .map(parse_message_detail)
+            }
+        })
+        .buffer_unordered(10)
+        .filter_map(|x| async { x })
+        .collect()
+        .await;
 
     // Save to database
     upsert_emails(&app, parsed_emails).map_err(|e| e.to_string())?;
@@ -342,7 +356,7 @@ pub async fn send_email(
 #[tauri::command]
 pub async fn mark_as_read(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
     // 1. Update local database instantly
-    crate::db::mark_as_read(&app, &message_id)?;
+    crate::db::mark_email_as_read_local(&app, &message_id)?;
 
     // 2. Notify Google API to remove UNREAD label
     let client = Client::new();

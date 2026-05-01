@@ -132,3 +132,49 @@ async fn exchange_code_for_token(code: &str) -> Result<AuthResponse, String> {
         Err(format!("Token alinamadi: {}", text))
     }
 }
+
+#[tauri::command]
+pub async fn refresh_access_token(app: tauri::AppHandle) -> Result<crate::db::AuthInfo, String> {
+    // 1. Get stored auth info with refresh_token
+    let existing = crate::db::get_auth_info(app.clone())
+        .map_err(|e| e.to_string())?
+        .ok_or("No stored auth info found")?;
+
+    if existing.refresh_token.is_empty() {
+        return Err("No refresh token available. Please login again.".into());
+    }
+
+    // 2. Use refresh_token to get a new access_token
+    let client = reqwest::Client::new();
+    let params = [
+        ("client_id", CLIENT_ID),
+        ("client_secret", CLIENT_SECRET),
+        ("refresh_token", existing.refresh_token.as_str()),
+        ("grant_type", "refresh_token"),
+    ];
+
+    let res = client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&params)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("Token refresh failed: {}", text));
+    }
+
+    let token_resp: AuthResponse = res.json().await.map_err(|e| e.to_string())?;
+
+    // 3. Save updated auth info (keep existing refresh_token if new one isn't provided)
+    let updated = crate::db::AuthInfo {
+        access_token: token_resp.access_token,
+        refresh_token: token_resp.refresh_token.unwrap_or(existing.refresh_token),
+        email: existing.email,
+        picture: existing.picture,
+    };
+
+    crate::db::save_auth(&app, updated.clone())?;
+    Ok(updated)
+}

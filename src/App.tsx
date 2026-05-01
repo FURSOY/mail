@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Plus, Edit3 } from "lucide-react";
+import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3 } from "lucide-react";
 import "./index.css";
 
 interface Email {
@@ -38,27 +38,56 @@ function App() {
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [iframeHeight, setIframeHeight] = useState(500);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load emails from local DB
-  const loadLocalEmails = async () => {
+  // Load emails by current tab from local DB
+  const loadEmails = async (tab?: string) => {
     try {
-      const localEmails = await invoke<Email[]>("get_local_emails");
-      setEmails(localEmails);
+      const label = tab || activeTab;
+      const result = await invoke<Email[]>("get_emails_by_label", { label });
+      setEmails(result);
     } catch (e) {
-      console.error("Failed to load local emails:", e);
+      console.error("Failed to load emails:", e);
     }
   };
 
+  // Background sync — fetch from Gmail and update local DB silently
+  const backgroundSync = async (token: string) => {
+    try {
+      setIsSyncing(true);
+      await invoke("sync_emails", { accessToken: token });
+      await loadEmails(); // Refresh list with new data
+    } catch (e) {
+      console.error("Background sync failed:", e);
+    }
+    setIsSyncing(false);
+  };
+
   useEffect(() => {
-    loadLocalEmails();
+    // 1. Show cached emails instantly
+    loadEmails();
     
-    invoke<AuthInfo | null>("get_auth_info").then(info => {
+    // 2. Check auth and auto-sync
+    invoke<AuthInfo | null>("get_auth_info").then(async info => {
       if (info) {
         setUserInfo(info);
         setAccessToken(info.access_token);
-        setAuthStatus("Logged in automatically");
+
+        // 3. Try to refresh token silently
+        let activeToken = info.access_token;
+        try {
+          const refreshed = await invoke<AuthInfo>("refresh_access_token");
+          setUserInfo(refreshed);
+          setAccessToken(refreshed.access_token);
+          activeToken = refreshed.access_token;
+        } catch {
+          console.log("Token refresh skipped, using existing token");
+        }
+
+        // 4. Auto-sync with Gmail in background
+        backgroundSync(activeToken);
       }
     }).catch(console.error);
 
@@ -76,6 +105,11 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Re-fetch when tab changes
+  useEffect(() => {
+    loadEmails(activeTab);
+  }, [activeTab]);
+
   async function loginWithGoogle() {
     try {
       setAuthStatus("Waiting for browser...");
@@ -88,7 +122,7 @@ function App() {
       await invoke("sync_emails", { accessToken: res.access_token });
       setIsSyncing(false);
       setAuthStatus("Sync complete!");
-      loadLocalEmails();
+      loadEmails();
     } catch (e) {
       setAuthStatus("Error: " + e);
       setIsSyncing(false);
@@ -116,7 +150,7 @@ function App() {
     setAuthStatus("Syncing...");
     try {
       await invoke("sync_emails", { accessToken });
-      await loadLocalEmails();
+      await loadEmails();
       setAuthStatus("Sync complete!");
     } catch (e) {
       setAuthStatus("Error: " + e);
@@ -150,7 +184,7 @@ function App() {
       await invoke("archive_email", { accessToken, messageId: emailId });
     } catch (e) {
       console.error("Archive failed:", e);
-      loadLocalEmails(); // Revert on error
+      loadEmails(); // Revert on error
     }
   };
 
@@ -163,7 +197,7 @@ function App() {
       await invoke("trash_email", { accessToken, messageId: emailId });
     } catch (e) {
       console.error("Trash failed:", e);
-      loadLocalEmails();
+      loadEmails();
     }
   };
 
@@ -228,16 +262,14 @@ function App() {
     return date.toLocaleDateString('tr-TR', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const filteredEmails = emails.filter(email => {
-    const matchesSearch = 
-      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const displayEmails = emails.filter(email => {
+    if (!searchQuery) return true;
+    return email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
       email.sender.toLowerCase().includes(searchQuery.toLowerCase()) ||
       email.snippet.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTab = email.label === activeTab;
-    return matchesSearch && matchesTab;
   });
 
-  const unreadCount = emails.filter(e => e.unread && e.label === 'inbox').length;
+  const unreadCount = emails.filter(e => e.unread).length;
 
   return (
     <div className="flex flex-col h-screen bg-[#09090b] text-zinc-300 font-sans overflow-hidden select-none">
@@ -414,12 +446,12 @@ function App() {
 
           {/* List */}
           <div className="flex-1 overflow-y-auto">
-            {filteredEmails.length === 0 && !isSyncing && (
+            {displayEmails.length === 0 && !isSyncing && (
               <div className="p-8 text-center text-zinc-600 text-xs">
                 {searchQuery ? "No emails match your search." : activeTab === 'inbox' ? "Inbox is empty." : `No ${activeTab} emails.`}
               </div>
             )}
-            {filteredEmails.map((mail) => (
+            {displayEmails.map((mail) => (
               <div 
                 key={mail.id} 
                 onClick={() => handleMailClick(mail)}
@@ -522,7 +554,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="flex-1 bg-white rounded-lg overflow-hidden min-h-[400px]">
+                <div className="flex-1 bg-white rounded-lg overflow-hidden">
                   <iframe
                     srcDoc={`
                       <!DOCTYPE html>
@@ -540,8 +572,17 @@ function App() {
                         </body>
                       </html>
                     `}
-                    sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
-                    className="w-full h-full border-none"
+                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                    className="w-full border-none"
+                    style={{ height: iframeHeight + 'px' }}
+                    onLoad={(e) => {
+                      try {
+                        const doc = (e.target as HTMLIFrameElement).contentDocument;
+                        if (doc?.body) {
+                          setIframeHeight(Math.max(400, doc.body.scrollHeight + 32));
+                        }
+                      } catch { setIframeHeight(500); }
+                    }}
                     title="Email Body"
                   />
                 </div>
