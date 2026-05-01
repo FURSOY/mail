@@ -38,7 +38,6 @@ function App() {
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
-  const [iframeHeight, setIframeHeight] = useState(500);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
 
@@ -53,14 +52,40 @@ function App() {
     }
   };
 
+  // Auto-refresh token and retry on 401
+  const syncWithAutoRefresh = async (token: string): Promise<string> => {
+    try {
+      await invoke("sync_emails", { accessToken: token });
+      return token;
+    } catch (e: any) {
+      const errStr = String(e);
+      // Token expired — try refreshing automatically
+      if (errStr.includes("401") || errStr.includes("Unauthorized") || errStr.includes("invalid_grant")) {
+        try {
+          const refreshed = await invoke<AuthInfo>("refresh_access_token");
+          setUserInfo(refreshed);
+          setAccessToken(refreshed.access_token);
+          // Retry sync with new token
+          await invoke("sync_emails", { accessToken: refreshed.access_token });
+          return refreshed.access_token;
+        } catch {
+          console.error("Token refresh failed during sync");
+          throw e;
+        }
+      }
+      throw e;
+    }
+  };
+
   // Background sync — fetch from Gmail and update local DB silently
   const backgroundSync = async (token: string) => {
     try {
       setIsSyncing(true);
-      await invoke("sync_emails", { accessToken: token });
+      await syncWithAutoRefresh(token);
       await loadEmails(); // Refresh list with new data
     } catch (e) {
-      console.error("Background sync failed:", e);
+      // Offline or API error — local cache still works
+      console.error("Background sync failed (offline?):", e);
     }
     setIsSyncing(false);
   };
@@ -573,16 +598,8 @@ function App() {
                       </html>
                     `}
                     sandbox="allow-popups allow-popups-to-escape-sandbox"
-                    className="w-full border-none"
-                    style={{ height: iframeHeight + 'px' }}
-                    onLoad={(e) => {
-                      try {
-                        const doc = (e.target as HTMLIFrameElement).contentDocument;
-                        if (doc?.body) {
-                          setIframeHeight(Math.max(400, doc.body.scrollHeight + 32));
-                        }
-                      } catch { setIframeHeight(500); }
-                    }}
+                    className="w-full border-none min-h-[400px]"
+                    style={{ flex: 1 }}
                     title="Email Body"
                   />
                 </div>
