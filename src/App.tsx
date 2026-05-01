@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Undo2, Copy } from "lucide-react";
 import "./index.css";
 
 interface Email {
@@ -308,6 +308,32 @@ function App() {
     setSelectedMail(null);
     try {
       await invoke("trash_email", { accessToken, messageId: emailId });
+    } catch (e) {
+      showToast("Silme başarısız", "error");
+      loadEmails();
+    }
+  };
+
+  const handleMoveToInbox = async (emailId: string) => {
+    if (!accessToken) return;
+    setEmails(prev => prev.filter(e => e.id !== emailId));
+    setSelectedMail(null);
+    try {
+      await invoke("move_to_inbox", { accessToken, messageId: emailId });
+      showToast("Gelen kutusuna taşındı", "success");
+    } catch (e) {
+      showToast("Taşıma başarısız", "error");
+      loadEmails();
+    }
+  };
+
+  const handlePermanentDelete = async (emailId: string) => {
+    if (!accessToken) return;
+    setEmails(prev => prev.filter(e => e.id !== emailId));
+    setSelectedMail(null);
+    try {
+      await invoke("permanently_delete", { accessToken, messageId: emailId });
+      showToast("Kalıcı olarak silindi", "success");
     } catch (e) {
       showToast("Silme başarısız", "error");
       loadEmails();

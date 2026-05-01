@@ -321,6 +321,57 @@ pub async fn trash_email(app: AppHandle, access_token: String, message_id: Strin
 }
 
 #[tauri::command]
+pub async fn move_to_inbox(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+    // 1. Update local DB
+    crate::db::update_email_label(&app, &message_id, "inbox")?;
+
+    // 2. Add INBOX, remove SPAM/TRASH labels
+    let client = Client::new();
+    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", message_id);
+    let body = serde_json::json!({
+        "addLabelIds": ["INBOX"],
+        "removeLabelIds": ["SPAM", "TRASH"]
+    });
+
+    let res = client
+        .post(&url)
+        .bearer_auth(&access_token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("Gmail move error: {}", res.text().await.unwrap_or_default()));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn permanently_delete(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+    // 1. Remove from local DB
+    crate::db::delete_email_from_db(&app, &message_id)?;
+
+    // 2. Permanently delete from Gmail
+    let client = Client::new();
+    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}", message_id);
+
+    let res = client
+        .delete(&url)
+        .bearer_auth(&access_token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("Gmail delete error: {}", res.text().await.unwrap_or_default()));
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn send_reply(
     access_token: String,
     to: String,
