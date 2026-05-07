@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpListener;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::time::{timeout, Duration};
 use tauri_plugin_opener::OpenerExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
+use tokio::time::{timeout, Duration};
 
 const REDIRECT_URI: &str = "http://127.0.0.1:8123/callback";
 
@@ -29,7 +29,7 @@ pub struct AuthResponse {
 #[derive(Deserialize)]
 struct UserInfo {
     email: String,
-    picture: String,
+    picture: Option<String>,
 }
 
 #[tauri::command]
@@ -43,7 +43,9 @@ pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::Auth
     );
 
     // 2. Tarayıcıda aç
-    app.opener().open_url(auth_url, None::<&str>).map_err(|e| e.to_string())?;
+    app.opener()
+        .open_url(auth_url, None::<&str>)
+        .map_err(|e| e.to_string())?;
 
     // 3. Lokal sunucuyu başlat — tek bağlantı al, sonra kapat
     let listener = TcpListener::bind("127.0.0.1:8123")
@@ -98,28 +100,28 @@ pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::Auth
 
     // 4. Code'u Access Token ile takas et
     let auth_resp = exchange_code_for_token(&code).await?;
-    
+
     // 5. Google'dan Kullanıcı Profilini Çek
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
     let user_res = client
         .get("https://www.googleapis.com/oauth2/v2/userinfo")
         .bearer_auth(&auth_resp.access_token)
         .send()
         .await
         .map_err(|e| e.to_string())?;
-        
+
     let user_info: UserInfo = user_res.json().await.map_err(|e| e.to_string())?;
-    
+
     let auth_info = crate::db::AuthInfo {
         access_token: auth_resp.access_token,
         refresh_token: auth_resp.refresh_token.unwrap_or_default(),
         email: user_info.email,
-        picture: user_info.picture,
+        picture: user_info.picture.unwrap_or_default(),
     };
-    
+
     // 6. Veritabanına kaydet
     crate::db::save_auth(&app, auth_info.clone())?;
-    
+
     Ok(auth_info)
 }
 
@@ -127,7 +129,7 @@ async fn exchange_code_for_token(code: &str) -> Result<AuthResponse, String> {
     let client_id = get_client_id();
     let client_secret = get_client_secret();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
     let params = [
         ("client_id", client_id.as_str()),
         ("client_secret", client_secret.as_str()),
@@ -165,7 +167,7 @@ pub async fn refresh_access_token(app: tauri::AppHandle) -> Result<crate::db::Au
     let client_id = get_client_id();
     let client_secret = get_client_secret();
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
     let params = [
         ("client_id", client_id.as_str()),
         ("client_secret", client_secret.as_str()),

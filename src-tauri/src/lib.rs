@@ -4,9 +4,22 @@ mod gmail;
 
 use std::sync::Mutex;
 
-/// Global sync lock — prevents concurrent syncs from corrupting the database
+/// Global sync lock — prevents concurrent syncs; coalesces overlapping requests into one follow-up sync
 pub struct SyncState {
     pub is_syncing: Mutex<bool>,
+    pub resync_requested: Mutex<bool>,
+}
+
+use tauri_plugin_notification::NotificationExt;
+
+#[tauri::command]
+fn show_copy_notification(app: tauri::AppHandle, code: String) {
+    app.notification()
+        .builder()
+        .title("Doğrulama Kodu")
+        .body(&format!("Kod: {}", &code))
+        .show()
+        .unwrap();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,6 +27,14 @@ pub fn run() {
     tauri::Builder::default()
         .manage(SyncState {
             is_syncing: Mutex::new(false),
+            resync_requested: Mutex::new(false),
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+            _ => {}
         })
         .setup(|app| {
             // Load .env file for OAuth credentials
@@ -21,10 +42,43 @@ pub fn run() {
 
             // Initialize database on startup
             db::init_db(app.handle()).expect("Failed to initialize database");
+
+            // Setup System Tray
+            use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager};
+            let quit_i = MenuItem::with_id(app, "quit", "Kapat", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             auth::start_google_oauth,
             auth::refresh_access_token,
@@ -40,7 +94,8 @@ pub fn run() {
             gmail::move_to_inbox,
             gmail::permanently_delete,
             gmail::send_reply,
-            gmail::send_email
+            gmail::send_email,
+            show_copy_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

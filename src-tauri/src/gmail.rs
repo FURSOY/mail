@@ -1,9 +1,9 @@
+use crate::db::{upsert_emails, Email};
+use base64::Engine;
+use futures::stream::{self, StreamExt};
 use reqwest::Client;
 use serde::Deserialize;
-use base64::Engine;
-use crate::db::{upsert_emails, Email};
 use tauri::{AppHandle, Manager};
-use futures::stream::{self, StreamExt};
 
 #[derive(Deserialize, Debug)]
 struct MessageListResponse {
@@ -88,13 +88,13 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
 
     // Parse HTML/Text body (base64url encoded)
     let mut body_html = String::new();
-    
+
     if let Some(parts) = &detail.payload.parts {
         if let Some(data) = find_part_data(parts, "text/html") {
             body_html = decode_base64_url(data);
         }
     }
-    
+
     if body_html.is_empty() {
         if let Some(parts) = &detail.payload.parts {
             if let Some(data) = find_part_data(parts, "text/plain") {
@@ -115,7 +115,7 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
     if let Some(parts) = &detail.payload.parts {
         let mut cids = std::collections::HashMap::new();
         collect_inline_images(parts, &mut cids);
-        
+
         for (cid, data_uri) in cids {
             let cid_target = format!("cid:{}", cid);
             body_html = body_html.replace(&cid_target, &data_uri);
@@ -141,7 +141,12 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
 }
 
 /// Fetch a list of message IDs from Gmail (with pagination support)
-async fn fetch_message_ids(client: &Client, access_token: &str, query: &str, max_results: u32) -> Result<Vec<MessageId>, String> {
+async fn fetch_message_ids(
+    client: &Client,
+    access_token: &str,
+    query: &str,
+    max_results: u32,
+) -> Result<Vec<MessageId>, String> {
     let mut all_messages = Vec::new();
     let mut page_token: Option<String> = None;
     let page_size = std::cmp::min(max_results, 100); // Gmail max per page is 100
@@ -163,11 +168,14 @@ async fn fetch_message_ids(client: &Client, access_token: &str, query: &str, max
             .map_err(|e| format!("List fetch error: {}", e))?;
 
         if !res.status().is_success() {
-            return Err(format!("Gmail API Error: {}", res.text().await.unwrap_or_default()));
+            return Err(format!(
+                "Gmail API Error: {}",
+                res.text().await.unwrap_or_default()
+            ));
         }
 
         let list_data: MessageListResponse = res.json().await.map_err(|e| e.to_string())?;
-        
+
         if let Some(msgs) = list_data.messages {
             all_messages.extend(msgs);
         }
@@ -185,7 +193,11 @@ async fn fetch_message_ids(client: &Client, access_token: &str, query: &str, max
 }
 
 /// Fetch full details of a single message
-async fn fetch_message_detail(client: &Client, access_token: &str, msg_id: &str) -> Result<MessageDetail, String> {
+async fn fetch_message_detail(
+    client: &Client,
+    access_token: &str,
+    msg_id: &str,
+) -> Result<MessageDetail, String> {
     let url = format!(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
         msg_id
@@ -202,28 +214,59 @@ async fn fetch_message_detail(client: &Client, access_token: &str, msg_id: &str)
 
 #[tauri::command]
 pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), String> {
-    // Prevent concurrent syncs
     let state = app.state::<crate::SyncState>();
+
     {
-        let mut lock = state.is_syncing.lock().map_err(|_| "Sync lock poisoned")?;
-        if *lock {
-            return Ok(()); // Already syncing, skip
+        let mut syncing = state.is_syncing.lock().map_err(|_| "Sync lock poisoned")?;
+        if *syncing {
+            let mut pending = state
+                .resync_requested
+                .lock()
+                .map_err(|_| "Sync lock poisoned")?;
+            *pending = true;
+            return Ok(());
         }
-        *lock = true;
+        *syncing = true;
     }
 
-    let result = do_sync(&app, &access_token).await;
+    let mut token = access_token;
+    loop {
+        let result = do_sync(&app, &token).await;
 
-    // Release lock
-    if let Ok(mut lock) = state.is_syncing.lock() {
-        *lock = false;
+        let run_again = {
+            let mut pending = state
+                .resync_requested
+                .lock()
+                .map_err(|_| "Sync lock poisoned")?;
+            let v = *pending;
+            *pending = false;
+            v
+        };
+
+        if let Err(e) = result {
+            let mut syncing = state.is_syncing.lock().map_err(|_| "Sync lock poisoned")?;
+            *syncing = false;
+            return Err(e);
+        }
+
+        if !run_again {
+            break;
+        }
+
+        // Refresh token in case the previous run renewed it (frontend also refreshes, but DB may be newer)
+        token = match crate::db::get_auth_info(app.clone()) {
+            Ok(Some(info)) => info.access_token,
+            _ => token,
+        };
     }
 
-    result
+    let mut syncing = state.is_syncing.lock().map_err(|_| "Sync lock poisoned")?;
+    *syncing = false;
+    Ok(())
 }
 
 async fn do_sync(app: &AppHandle, access_token: &str) -> Result<(), String> {
-    let client = Client::new();
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
     let mut all_ids = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
@@ -275,13 +318,20 @@ async fn do_sync(app: &AppHandle, access_token: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn archive_email(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+pub async fn archive_email(
+    app: AppHandle,
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
     // 1. Update local DB
     crate::db::update_email_label(&app, &message_id, "archive")?;
 
     // 2. Remove INBOX label from Gmail
-    let client = Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", message_id);
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify",
+        message_id
+    );
     let body = serde_json::json!({
         "removeLabelIds": ["INBOX"]
     });
@@ -298,13 +348,20 @@ pub async fn archive_email(app: AppHandle, access_token: String, message_id: Str
 }
 
 #[tauri::command]
-pub async fn trash_email(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+pub async fn trash_email(
+    app: AppHandle,
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
     // 1. Update local DB label to 'trash' (keep it visible in Trash tab)
     crate::db::update_email_label(&app, &message_id, "trash")?;
 
     // 2. Trash on Gmail
-    let client = Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash", message_id);
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/trash",
+        message_id
+    );
 
     let res = client
         .post(&url)
@@ -314,20 +371,30 @@ pub async fn trash_email(app: AppHandle, access_token: String, message_id: Strin
         .map_err(|e| e.to_string())?;
 
     if !res.status().is_success() {
-        return Err(format!("Gmail trash error: {}", res.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Gmail trash error: {}",
+            res.text().await.unwrap_or_default()
+        ));
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn move_to_inbox(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+pub async fn move_to_inbox(
+    app: AppHandle,
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
     // 1. Update local DB
     crate::db::update_email_label(&app, &message_id, "inbox")?;
 
     // 2. Add INBOX, remove SPAM/TRASH labels
-    let client = Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", message_id);
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify",
+        message_id
+    );
     let body = serde_json::json!({
         "addLabelIds": ["INBOX"],
         "removeLabelIds": ["SPAM", "TRASH"]
@@ -342,20 +409,30 @@ pub async fn move_to_inbox(app: AppHandle, access_token: String, message_id: Str
         .map_err(|e| e.to_string())?;
 
     if !res.status().is_success() {
-        return Err(format!("Gmail move error: {}", res.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Gmail move error: {}",
+            res.text().await.unwrap_or_default()
+        ));
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn permanently_delete(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+pub async fn permanently_delete(
+    app: AppHandle,
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
     // 1. Remove from local DB
     crate::db::delete_email_from_db(&app, &message_id)?;
 
     // 2. Permanently delete from Gmail
-    let client = Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}", message_id);
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
+        message_id
+    );
 
     let res = client
         .delete(&url)
@@ -365,7 +442,10 @@ pub async fn permanently_delete(app: AppHandle, access_token: String, message_id
         .map_err(|e| e.to_string())?;
 
     if !res.status().is_success() {
-        return Err(format!("Gmail delete error: {}", res.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Gmail delete error: {}",
+            res.text().await.unwrap_or_default()
+        ));
     }
 
     Ok(())
@@ -380,8 +460,8 @@ pub async fn send_reply(
     thread_id: String,
     message_id: String,
 ) -> Result<(), String> {
-    let client = Client::new();
-    
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+
     // Build RFC 2822 formatted email
     let raw_email = format!(
         "To: {}\r\nSubject: Re: {}\r\nIn-Reply-To: {}\r\nReferences: {}\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n{}",
@@ -401,7 +481,7 @@ pub async fn send_reply(
     });
 
     let url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
-    
+
     let res = client
         .post(url)
         .bearer_auth(&access_token)
@@ -411,7 +491,10 @@ pub async fn send_reply(
         .map_err(|e| format!("Send error: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!("Gmail send error: {}", res.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Gmail send error: {}",
+            res.text().await.unwrap_or_default()
+        ));
     }
 
     Ok(())
@@ -424,13 +507,11 @@ pub async fn send_email(
     subject: String,
     body: String,
 ) -> Result<(), String> {
-    let client = Client::new();
-    
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+
     let raw_email = format!(
         "To: {}\r\nSubject: {}\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n{}",
-        to,
-        subject,
-        body
+        to, subject, body
     );
 
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw_email.as_bytes());
@@ -440,7 +521,7 @@ pub async fn send_email(
     });
 
     let url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
-    
+
     let res = client
         .post(url)
         .bearer_auth(&access_token)
@@ -450,20 +531,30 @@ pub async fn send_email(
         .map_err(|e| format!("Send error: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!("Gmail send error: {}", res.text().await.unwrap_or_default()));
+        return Err(format!(
+            "Gmail send error: {}",
+            res.text().await.unwrap_or_default()
+        ));
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn mark_as_read(app: AppHandle, access_token: String, message_id: String) -> Result<(), String> {
+pub async fn mark_as_read(
+    app: AppHandle,
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
     // 1. Update local database instantly
     crate::db::mark_email_as_read_local(&app, &message_id)?;
 
     // 2. Notify Google API to remove UNREAD label
-    let client = Client::new();
-    let url = format!("https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify", message_id);
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify",
+        message_id
+    );
     let body = serde_json::json!({
         "removeLabelIds": ["UNREAD"]
     });
@@ -479,7 +570,10 @@ pub async fn mark_as_read(app: AppHandle, access_token: String, message_id: Stri
     Ok(())
 }
 
-fn collect_inline_images(parts: &[MessagePart], cids: &mut std::collections::HashMap<String, String>) {
+fn collect_inline_images(
+    parts: &[MessagePart],
+    cids: &mut std::collections::HashMap<String, String>,
+) {
     for part in parts {
         if part.mime_type.starts_with("image/") {
             if let Some(headers) = &part.headers {
@@ -490,19 +584,20 @@ fn collect_inline_images(parts: &[MessagePart], cids: &mut std::collections::Has
                         break;
                     }
                 }
-                
+
                 if !content_id.is_empty() {
                     if let Some(body) = &part.body {
                         if let Some(data) = &body.data {
                             let standard_b64 = data.replace("-", "+").replace("_", "/");
-                            let data_uri = format!("data:{};base64,{}", part.mime_type, standard_b64);
+                            let data_uri =
+                                format!("data:{};base64,{}", part.mime_type, standard_b64);
                             cids.insert(content_id, data_uri);
                         }
                     }
                 }
             }
         }
-        
+
         if let Some(subparts) = &part.parts {
             collect_inline_images(subparts, cids);
         }
