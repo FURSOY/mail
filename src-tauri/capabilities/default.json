@@ -19,6 +19,11 @@
     "notification:default",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
-    "notification:allow-notify"
+    "notification:allow-notify",
+    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-unminimize"
   ]
 }

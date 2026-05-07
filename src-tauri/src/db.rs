@@ -58,7 +58,10 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
         .map(|c| c > 0)
         .unwrap_or(false);
     if !has_label {
-        conn.execute("ALTER TABLE emails ADD COLUMN label TEXT NOT NULL DEFAULT 'inbox'", [])?;
+        conn.execute(
+            "ALTER TABLE emails ADD COLUMN label TEXT NOT NULL DEFAULT 'inbox'",
+            [],
+        )?;
     }
 
     let has_recipient: bool = conn
@@ -67,7 +70,10 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
         .map(|c| c > 0)
         .unwrap_or(false);
     if !has_recipient {
-        conn.execute("ALTER TABLE emails ADD COLUMN recipient TEXT NOT NULL DEFAULT ''", [])?;
+        conn.execute(
+            "ALTER TABLE emails ADD COLUMN recipient TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
     }
 
     conn.execute(
@@ -196,37 +202,40 @@ pub fn get_local_emails(app: tauri::AppHandle) -> Result<Vec<Email>, String> {
 pub fn mark_email_as_read_local(app: &AppHandle, id: &str) -> Result<(), String> {
     let db_path = get_db_path(app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     conn.execute("UPDATE emails SET unread = 0 WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
-        
+
     Ok(())
 }
 
 pub fn update_email_label(app: &AppHandle, id: &str, label: &str) -> Result<(), String> {
     let db_path = get_db_path(app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
-    conn.execute("UPDATE emails SET label = ?1 WHERE id = ?2", params![label, id])
-        .map_err(|e| e.to_string())?;
-        
+
+    conn.execute(
+        "UPDATE emails SET label = ?1 WHERE id = ?2",
+        params![label, id],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
 pub fn delete_email_from_db(app: &AppHandle, id: &str) -> Result<(), String> {
     let db_path = get_db_path(app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     conn.execute("DELETE FROM emails WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
-        
+
     Ok(())
 }
 
 pub fn save_auth(app: &AppHandle, auth: AuthInfo) -> Result<(), String> {
     let db_path = get_db_path(app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     conn.execute(
         "INSERT INTO auth (id, access_token, refresh_token, email, picture) 
          VALUES (1, ?1, ?2, ?3, ?4)
@@ -235,9 +244,15 @@ pub fn save_auth(app: &AppHandle, auth: AuthInfo) -> Result<(), String> {
             refresh_token=excluded.refresh_token,
             email=excluded.email,
             picture=excluded.picture",
-        params![auth.access_token, auth.refresh_token, auth.email, auth.picture]
-    ).map_err(|e| e.to_string())?;
-    
+        params![
+            auth.access_token,
+            auth.refresh_token,
+            auth.email,
+            auth.picture
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -245,11 +260,13 @@ pub fn save_auth(app: &AppHandle, auth: AuthInfo) -> Result<(), String> {
 pub fn get_auth_info(app: tauri::AppHandle) -> Result<Option<AuthInfo>, String> {
     let db_path = get_db_path(&app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
-    let mut stmt = conn.prepare("SELECT access_token, refresh_token, email, picture FROM auth WHERE id = 1").map_err(|e| e.to_string())?;
-    
+
+    let mut stmt = conn
+        .prepare("SELECT access_token, refresh_token, email, picture FROM auth WHERE id = 1")
+        .map_err(|e| e.to_string())?;
+
     let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
-    
+
     if let Some(row) = rows.next().map_err(|e| e.to_string())? {
         Ok(Some(AuthInfo {
             access_token: row.get(0).unwrap_or_default(),
@@ -266,9 +283,10 @@ pub fn get_auth_info(app: tauri::AppHandle) -> Result<Option<AuthInfo>, String> 
 pub fn logout(app: tauri::AppHandle) -> Result<(), String> {
     let db_path = get_db_path(&app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
-    conn.execute("DELETE FROM auth WHERE id = 1", []).map_err(|e| e.to_string())?;
-    
+
+    conn.execute("DELETE FROM auth WHERE id = 1", [])
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -276,7 +294,7 @@ pub fn logout(app: tauri::AppHandle) -> Result<(), String> {
 pub fn get_inbox_unread_count(app: tauri::AppHandle) -> Result<i64, String> {
     let db_path = get_db_path(&app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    
+
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM emails WHERE label = 'inbox' AND unread = 1",
@@ -284,6 +302,6 @@ pub fn get_inbox_unread_count(app: tauri::AppHandle) -> Result<i64, String> {
             |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
-    
+
     Ok(count)
 }
