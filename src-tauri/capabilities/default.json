@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "notification"
   ],
   "permissions": [
     "core:default",
@@ -24,6 +25,8 @@
     "clipboard-manager:allow-write-text",
     "core:window:allow-hide",
     "core:window:allow-show",
-    "core:window:allow-unminimize"
+    "core:window:allow-unminimize",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position"
   ]
 }
