@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod gmail;
+mod notify;
 
 use std::sync::Mutex;
 
@@ -10,18 +11,6 @@ pub struct SyncState {
     pub resync_requested: Mutex<bool>,
 }
 
-use tauri_plugin_notification::NotificationExt;
-
-#[tauri::command]
-fn show_copy_notification(app: tauri::AppHandle, code: String) {
-    app.notification()
-        .builder()
-        .title("Doğrulama Kodu")
-        .body(&format!("Kod: {}", &code))
-        .show()
-        .unwrap();
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -29,10 +18,14 @@ pub fn run() {
             is_syncing: Mutex::new(false),
             resync_requested: Mutex::new(false),
         })
+        .manage(notify::PendingNotification(Mutex::new(None)))
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
-                let _ = window.hide();
-                api.prevent_close();
+                // Only intercept close on main window; let notification window close normally
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
             _ => {}
         })
@@ -95,7 +88,9 @@ pub fn run() {
             gmail::permanently_delete,
             gmail::send_reply,
             gmail::send_email,
-            show_copy_notification
+            notify::show_custom_notification,
+            notify::get_pending_notification,
+            notify::get_screen_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

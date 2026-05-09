@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notification</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      background: #18181b;
+      color: #fafafa;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+
+    #wrapper {
+      width: 100%;
+    }
+
+    #stack {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    /* ── Single notification card ── */
+    .card {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      cursor: pointer;
+      position: relative;
+      animation: fadeIn 0.2s ease;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    .card.removing {
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+    }
+
+    .card+.card {
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .card-top {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .icon-circle {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(59, 130, 246, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .text-area {
+      overflow: hidden;
+      flex: 1;
+      padding-right: 18px;
+    }
+
+    .title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #f4f4f5;
+    }
+
+    .body {
+      font-size: 11.5px;
+      color: #a1a1aa;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Close button */
+    .close-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 20px;
+      height: 20px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      color: #52525b;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #d4d4d8;
+    }
+
+    /* Code copy button — bottom right of card */
+    .code-row {
+      display: none;
+      justify-content: flex-end;
+      align-items: center;
+      padding-right: 2px;
+    }
+
+    .code-row.visible {
+      display: flex;
+    }
+
+    .code-btn {
+      padding: 4px 10px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(59, 130, 246, 0.12);
+      color: #60a5fa;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      transition: all 0.15s;
+    }
+
+    .code-btn:hover {
+      background: rgba(59, 130, 246, 0.22);
+      color: #93bbfd;
+    }
+
+    /* Dismiss all bar */
+    #dismissAll {
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 6px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      cursor: pointer;
+      font-size: 11px;
+      color: #52525b;
+      transition: color 0.15s;
+    }
+
+    #dismissAll:hover {
+      color: #a1a1aa;
+    }
+
+    #dismissAll.visible {
+      display: flex;
+    }
+
+    /* Global progress bar */
+    #progressBar {
+      width: 100%;
+      height: 2px;
+      background: rgba(59, 130, 246, 0.4);
+      transition: width linear;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrapper">
+    <div id="stack"></div>
+    <div id="progressBar"></div>
+    <div id="dismissAll">Tümünü Kapat</div>
+  </div>
+
+  <script type="module">
+    import { invoke } from '@tauri-apps/api/core';
+    import { getCurrentWindow, LogicalSize, LogicalPosition } from '@tauri-apps/api/window';
+    import { listen, emitTo } from '@tauri-apps/api/event';
+    import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+
+    const win = getCurrentWindow();
+    const notifications = [];  // { id, title, body, code }
+    let nextId = 0;
+    let screenW = 1920, screenH = 1080;
+    const WIN_W = 340;
+    const BOTTOM_MARGIN = 64;
+
+    // ── Global timer state ──
+    let globalTimer = null;
+    let timerStartedAt = 0;  // Date.now() when timer was started
+    let timerDuration = 0;   // total ms for this timer run
+
+    // ── Get screen info ──
+    try {
+      const info = await invoke('get_screen_info');
+      screenW = info[0]; screenH = info[1];
+    } catch (e) {
+      console.error('[NOTIF] screen info error:', e);
+    }
+
+    // ── Resize window to fit content ──
+    async function resizeWindow() {
+      const count = notifications.length;
+      if (count === 0) return;
+
+      await new Promise(r => requestAnimationFrame(r));
+      const wrapper = document.getElementById('wrapper');
+      const contentH = wrapper.scrollHeight + 2; // +2 for progress bar
+
+      const x = screenW - WIN_W - 16;
+      const y = screenH - contentH - BOTTOM_MARGIN;
+
+      await win.setSize(new LogicalSize(WIN_W, contentH));
+      await win.setPosition(new LogicalPosition(x, y));
+    }
+
+    // ── Progress bar ──
+    function startProgressBar(durationMs) {
+      const bar = document.getElementById('progressBar');
+      // Reset to full width instantly
+      bar.style.transition = 'none';
+      bar.style.width = '100%';
+      void bar.offsetWidth; // force reflow
+      // Animate to 0 over the duration
+      bar.style.transition = `width ${durationMs}ms linear`;
+      bar.style.width = '0%';
+    }
+
+    // ── Global timer: start or extend ──
+    function extendTimer(addMs) {
+      const now = Date.now();
+      let remaining = 0;
+      if (globalTimer) {
+        // Calculate how much time is left
+        const elapsed = now - timerStartedAt;
+        remaining = Math.max(timerDuration - elapsed, 0);
+        clearTimeout(globalTimer);
+      }
+      const newDuration = remaining + addMs;
+      timerDuration = newDuration;
+      timerStartedAt = now;
+      globalTimer = setTimeout(dismissAll, newDuration);
+      startProgressBar(newDuration);
+    }
+
+    function clearGlobalTimer() {
+      if (globalTimer) {
+        clearTimeout(globalTimer);
+        globalTimer = null;
+      }
+      timerDuration = 0;
+      timerStartedAt = 0;
+    }
+
+    // ── Render ──
+    function render() {
+      const stack = document.getElementById('stack');
+      stack.innerHTML = '';
+
+      notifications.forEach((n) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.id = n.id;
+
+        card.innerHTML = `
+          <button class="close-btn" data-id="${n.id}">&times;</button>
+          <div class="card-top">
+            <div class="icon-circle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+            </div>
+            <div class="text-area">
+              <div class="title">${esc(n.title)}</div>
+              <div class="body">${esc(n.body)}</div>
+            </div>
+          </div>
+          <div class="code-row ${n.code ? 'visible' : ''}">
+            <button class="code-btn" data-id="${n.id}" data-code="${escAttr(n.code || '')}">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Kopyala (${esc(n.code || '')})
+            </button>
+          </div>
+        `;
+
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.close-btn') || e.target.closest('.code-btn')) return;
+          openMailAndDismiss(n.id);
+        });
+
+        stack.appendChild(card);
+      });
+
+      stack.querySelectorAll('.close-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dismissById(parseInt(btn.dataset.id));
+        });
+      });
+
+      stack.querySelectorAll('.code-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          copyAndDismiss(parseInt(btn.dataset.id), btn.dataset.code);
+        });
+      });
+
+      document.getElementById('dismissAll').className = notifications.length > 1 ? 'visible' : '';
+    }
+
+    function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function escAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
+
+    // ── Add notification ──
+    function addNotification(data) {
+      if (!data) return;
+      const id = nextId++;
+      notifications.push({ id, title: data.title, body: data.body, code: data.code || null });
+      render();
+      resizeWindow();
+      win.show();
+      extendTimer(5000); // +5s to remaining time
+    }
+
+    // ── Dismiss one with animation (timer continues unchanged) ──
+    function dismissById(id) {
+      const idx = notifications.findIndex(n => n.id === id);
+      if (idx === -1) return;
+      notifications.splice(idx, 1);
+
+      if (notifications.length === 0) {
+        clearGlobalTimer();
+        win.hide();
+        return;
+      }
+
+      const card = document.querySelector(`.card[data-id="${id}"]`);
+      if (card) {
+        card.classList.add('removing');
+        setTimeout(() => {
+          card.remove();
+          document.getElementById('dismissAll').className = notifications.length > 1 ? 'visible' : '';
+          resizeWindow();
+        }, 250);
+      } else {
+        render();
+        resizeWindow();
+      }
+    }
+
+    // ── Dismiss all ──
+    function dismissAll() {
+      clearGlobalTimer();
+      notifications.length = 0;
+      win.hide();
+    }
+
+    // ── Open mail + dismiss that card ──
+    function openMailAndDismiss(id) {
+      emitTo('main', 'focus-main-window').catch(() => {});
+      dismissById(id);
+    }
+
+    // ── Copy code + dismiss that card ──
+    function copyAndDismiss(id, code) {
+      if (code) writeText(code).catch(() => {});
+      dismissById(id);
+    }
+
+    // ── Dismiss All button ──
+    document.getElementById('dismissAll').addEventListener('click', dismissAll);
+
+    // ── Init ──
+    try {
+      const data = await invoke('get_pending_notification');
+      if (data) addNotification(data);
+    } catch (e) {
+      console.error('[NOTIF] init error:', e);
+    }
+
+    listen('new-notification', (event) => {
+      addNotification(event.payload);
+    });
+  </script>
+</body>
+
+</html>

@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw } from "lucide-react";
+import NotificationWindow from "./NotificationWindow";
 import "./index.css";
 
 /** Background polling when logged in (ms). Coalesced server-side if sync overlaps. */
@@ -274,46 +275,27 @@ function App() {
 
   const notifyNewEmails = useCallback(async (newEmails: Email[]) => {
     if (newEmails.length === 0) return;
-    try {
-      let granted = await isPermissionGranted();
-      if (!granted) {
-        const perm = await requestPermission();
-        granted = perm === "granted";
-      }
-      if (!granted) return;
 
+    try {
       for (const email of newEmails.slice(0, 5)) {
         const senderName = email.sender.split("<")[0].replace(/"/g, "").trim() || email.sender;
         const code = extractVerificationCode(email);
         
-        let notifTitle = "";
-        let notifBody = "";
+        let notifTitle = senderName.slice(0, 64);
+        let notifBody = (email.subject || email.snippet || "").trim().slice(0, 100) || "Yeni ileti";
 
-        if (code) {
-          // Auto-copy the code
-          await writeText(code);
-          showToast(`Otomatik Kopyalandı: ${code}`, "success");
-          
-          notifTitle = `Doğrulama Kodu: ${code}`;
-          notifBody = `Panoya kopyalandı! (Gönderen: ${senderName})`;
-        } else {
-          const preview = (email.subject || email.snippet || "").trim().slice(0, 100);
-          notifTitle = senderName.slice(0, 64);
-          notifBody = preview || "Yeni ileti";
-        }
-
-        // Cache for click handling
-        recentNotificationsRef.current[notifTitle + notifBody] = email.id;
-        
-        sendNotification({
+        // Let the Rust backend spawn the notification window
+        // It will automatically suppress it if the user is in a fullscreen game!
+        await invoke("show_custom_notification", {
           title: notifTitle,
           body: notifBody,
+          code: code || null
         });
       }
     } catch (e) {
       console.error("Notification error:", e);
     }
-  }, [showToast]);
+  }, []);
 
   /** Stop background polling (logout / unmount). */
   const clearPeriodicSync = () => {
@@ -413,9 +395,18 @@ function App() {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
+
+    const unlistenFocus = listen("focus-main-window", async () => {
+      const win = getCurrentWindow();
+      await win.unminimize();
+      await win.show();
+      await win.setFocus();
+    });
+
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       clearPeriodicSync();
+      unlistenFocus.then(f => f());
     };
   }, []);
 
@@ -728,6 +719,7 @@ function App() {
                   <div className="text-xs font-medium text-zinc-300 truncate">{userInfo.email.split('@')[0]}</div>
                   <div className="text-[10px] text-zinc-600 truncate">{userInfo.email}</div>
                 </div>
+
                 <ToolbarTip label="Çıkış">
                   <button
                     type="button"
