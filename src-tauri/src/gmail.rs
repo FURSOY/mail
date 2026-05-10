@@ -1,9 +1,302 @@
-use crate::db::{upsert_emails, Email};
+use crate::db::{delete_emails_by_ids, get_history_id, set_history_id, upsert_emails, Email};
 use base64::Engine;
 use futures::stream::{self, StreamExt};
 use reqwest::Client;
 use serde::Deserialize;
 use tauri::{AppHandle, Manager};
+
+// ── History API types ──
+
+#[derive(Deserialize, Debug)]
+struct HistoryListResponse {
+    history: Option<Vec<HistoryRecord>>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
+    #[serde(rename = "historyId")]
+    history_id: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct HistoryRecord {
+    #[serde(rename = "messagesAdded")]
+    messages_added: Option<Vec<HistoryMessage>>,
+    #[serde(rename = "messagesDeleted")]
+    messages_deleted: Option<Vec<HistoryMessage>>,
+    #[serde(rename = "labelsAdded")]
+    labels_added: Option<Vec<HistoryLabelChange>>,
+    #[serde(rename = "labelsRemoved")]
+    labels_removed: Option<Vec<HistoryLabelChange>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct HistoryMessage {
+    message: HistoryMessageRef,
+}
+
+#[derive(Deserialize, Debug)]
+struct HistoryMessageRef {
+    id: String,
+    #[serde(rename = "labelIds")]
+    label_ids: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct HistoryLabelChange {
+    message: HistoryMessageRef,
+    #[serde(rename = "labelIds")]
+    label_ids: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ProfileResponse {
+    #[serde(rename = "historyId")]
+    history_id: String,
+}
+
+// ── Get current historyId from Gmail profile ──
+async fn get_profile_history_id(client: &Client, access_token: &str) -> Result<String, String> {
+    let res = client
+        .get("https://gmail.googleapis.com/gmail/v1/users/me/profile")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Profile fetch error: {}", e))?;
+
+    if !res.status().is_success() {
+        return Err(format!("Profile API error: {}", res.status()));
+    }
+
+    let profile: ProfileResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(profile.history_id)
+}
+
+// ── Fetch history changes since a given historyId ──
+async fn fetch_history(
+    client: &Client,
+    access_token: &str,
+    start_history_id: &str,
+) -> Result<(Vec<String>, Vec<String>, Vec<String>, String), String> {
+    // Returns: (added_ids, deleted_ids, changed_ids, new_history_id)
+    let mut added_ids = std::collections::HashSet::new();
+    let mut deleted_ids = std::collections::HashSet::new();
+    let mut changed_ids = std::collections::HashSet::new();
+    let mut latest_history_id = start_history_id.to_string();
+    let mut page_token: Option<String> = None;
+
+    loop {
+        let mut url = format!(
+            "https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId={}&maxResults=500",
+            start_history_id
+        );
+        if let Some(ref token) = page_token {
+            url.push_str(&format!("&pageToken={}", token));
+        }
+
+        let res = client
+            .get(&url)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| format!("History fetch error: {}", e))?;
+
+        let status = res.status();
+        if status.as_u16() == 404 {
+            return Err("HISTORY_EXPIRED".to_string());
+        }
+        if !status.is_success() {
+            let body = res.text().await.unwrap_or_default();
+            if body.contains("notFound") || body.contains("Start history id is too old") {
+                return Err("HISTORY_EXPIRED".to_string());
+            }
+            return Err(format!("History API error {}: {}", status, body));
+        }
+
+        let data: HistoryListResponse = res.json().await.map_err(|e| e.to_string())?;
+
+        if let Some(hid) = &data.history_id {
+            latest_history_id = hid.clone();
+        }
+
+        if let Some(records) = data.history {
+            for record in records {
+                if let Some(added) = record.messages_added {
+                    for msg in added {
+                        added_ids.insert(msg.message.id);
+                    }
+                }
+                if let Some(deleted) = record.messages_deleted {
+                    for msg in deleted {
+                        deleted_ids.insert(msg.message.id);
+                    }
+                }
+                if let Some(label_adds) = record.labels_added {
+                    for change in label_adds {
+                        changed_ids.insert(change.message.id);
+                    }
+                }
+                if let Some(label_removes) = record.labels_removed {
+                    for change in label_removes {
+                        changed_ids.insert(change.message.id);
+                    }
+                }
+            }
+        }
+
+        if data.next_page_token.is_none() {
+            break;
+        }
+        page_token = data.next_page_token;
+    }
+
+    // Remove deleted from added/changed (if a message was added then deleted)
+    for did in &deleted_ids {
+        added_ids.remove(did);
+        changed_ids.remove(did);
+    }
+
+    // Merge added + changed (both need a full fetch)
+    let mut fetch_ids: Vec<String> = added_ids.into_iter().collect();
+    for cid in changed_ids {
+        if !fetch_ids.contains(&cid) {
+            fetch_ids.push(cid);
+        }
+    }
+
+    Ok((
+        fetch_ids,
+        deleted_ids.into_iter().collect(),
+        vec![], // unused
+        latest_history_id,
+    ))
+}
+
+// ── Incremental sync using History API ──
+async fn do_incremental_sync(app: &AppHandle, access_token: &str, start_history_id: &str) -> Result<(), String> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_default();
+
+    let (fetch_ids, delete_ids, _, new_history_id) =
+        fetch_history(&client, access_token, start_history_id).await?;
+
+    eprintln!(
+        "[SYNC] incremental: {} to fetch, {} to delete, new historyId={}",
+        fetch_ids.len(),
+        delete_ids.len(),
+        new_history_id
+    );
+
+    // Delete removed messages from DB
+    if !delete_ids.is_empty() {
+        let app_clone = app.clone();
+        let ids = delete_ids.clone();
+        tokio::task::spawn_blocking(move || {
+            delete_emails_by_ids(&app_clone, &ids)
+        })
+        .await
+        .map_err(|e| format!("DB delete task failed: {}", e))??;
+    }
+
+    // Fetch details for new/changed messages
+    if !fetch_ids.is_empty() {
+        let parsed_emails: Vec<Email> = stream::iter(fetch_ids)
+            .map(|id| {
+                let client = &client;
+                let token = access_token;
+                async move {
+                    fetch_message_detail(client, token, &id)
+                        .await
+                        .ok()
+                        .map(parse_message_detail)
+                }
+            })
+            .buffer_unordered(10)
+            .filter_map(|x| async { x })
+            .collect()
+            .await;
+
+        if !parsed_emails.is_empty() {
+            let app_clone = app.clone();
+            tokio::task::spawn_blocking(move || {
+                upsert_emails(&app_clone, parsed_emails).map_err(|e| e.to_string())
+            })
+            .await
+            .map_err(|e| format!("DB upsert task failed: {}", e))??;
+        }
+    }
+
+    // Save new history ID
+    set_history_id(app, &new_history_id)?;
+
+    Ok(())
+}
+
+// ── Full sync (existing logic, now saves historyId at the end) ──
+async fn do_sync(app: &AppHandle, access_token: &str) -> Result<(), String> {
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+
+    // Get current historyId BEFORE fetching messages (to not miss anything)
+    let profile_history_id = get_profile_history_id(&client, access_token).await.ok();
+
+    let mut all_ids = Vec::new();
+    let mut seen_ids = std::collections::HashSet::new();
+
+    let queries = vec![
+        ("in:inbox", 500u32),
+        ("in:sent", 200),
+        ("in:spam", 50),
+        ("in:trash", 50),
+        ("-in:inbox -in:sent -in:spam -in:trash -in:drafts", 100), // Archive
+    ];
+
+    // Collect all unique message IDs first
+    for (query, max) in queries {
+        if let Ok(ids) = fetch_message_ids(&client, access_token, query, max).await {
+            for msg in ids {
+                if seen_ids.insert(msg.id.clone()) {
+                    all_ids.push(msg.id);
+                }
+            }
+        }
+    }
+
+    eprintln!("[SYNC] full sync: {} messages to fetch", all_ids.len());
+
+    // Fetch all message details in parallel (max 10 concurrent)
+    let parsed_emails: Vec<Email> = stream::iter(all_ids)
+        .map(|id| {
+            let client = &client;
+            let token = access_token;
+            async move {
+                fetch_message_detail(client, token, &id)
+                    .await
+                    .ok()
+                    .map(parse_message_detail)
+            }
+        })
+        .buffer_unordered(10)
+        .filter_map(|x| async { x })
+        .collect()
+        .await;
+
+    // Save to database (spawn_blocking to avoid blocking tokio)
+    let app_clone = app.clone();
+    tokio::task::spawn_blocking(move || {
+        upsert_emails(&app_clone, parsed_emails).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("DB task failed: {}", e))??;
+
+    // Save historyId for future incremental syncs
+    if let Some(hid) = profile_history_id {
+        eprintln!("[SYNC] full sync done, saving historyId={}", hid);
+        set_history_id(app, &hid)?;
+    }
+
+    Ok(())
+}
+
 
 #[derive(Deserialize, Debug)]
 struct MessageListResponse {
@@ -231,7 +524,24 @@ pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), Str
 
     let mut token = access_token;
     loop {
-        let result = do_sync(&app, &token).await;
+        // Try incremental sync first, fall back to full sync
+        let result = {
+            let history_id = get_history_id(&app);
+            if let Some(hid) = history_id {
+                eprintln!("[SYNC] attempting incremental sync from historyId={}", hid);
+                match do_incremental_sync(&app, &token, &hid).await {
+                    Ok(()) => Ok(()),
+                    Err(e) if e == "HISTORY_EXPIRED" => {
+                        eprintln!("[SYNC] history expired, falling back to full sync");
+                        do_sync(&app, &token).await
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                eprintln!("[SYNC] no historyId found, doing full sync");
+                do_sync(&app, &token).await
+            }
+        };
 
         let run_again = {
             let mut pending = state
@@ -253,7 +563,7 @@ pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), Str
             break;
         }
 
-        // Refresh token in case the previous run renewed it (frontend also refreshes, but DB may be newer)
+        // Refresh token in case the previous run renewed it
         token = match crate::db::get_auth_info(app.clone()) {
             Ok(Some(info)) => info.access_token,
             _ => token,
@@ -262,58 +572,6 @@ pub async fn sync_emails(app: AppHandle, access_token: String) -> Result<(), Str
 
     let mut syncing = state.is_syncing.lock().map_err(|_| "Sync lock poisoned")?;
     *syncing = false;
-    Ok(())
-}
-
-async fn do_sync(app: &AppHandle, access_token: &str) -> Result<(), String> {
-    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
-    let mut all_ids = Vec::new();
-    let mut seen_ids = std::collections::HashSet::new();
-
-    let queries = vec![
-        ("in:inbox", 500u32),
-        ("in:sent", 200),
-        ("in:spam", 50),
-        ("in:trash", 50),
-        ("-in:inbox -in:sent -in:spam -in:trash -in:drafts", 100), // Archive
-    ];
-
-    // Collect all unique message IDs first
-    for (query, max) in queries {
-        if let Ok(ids) = fetch_message_ids(&client, access_token, query, max).await {
-            for msg in ids {
-                if seen_ids.insert(msg.id.clone()) {
-                    all_ids.push(msg.id);
-                }
-            }
-        }
-    }
-
-    // Fetch all message details in parallel (max 10 concurrent)
-    let parsed_emails: Vec<Email> = stream::iter(all_ids)
-        .map(|id| {
-            let client = &client;
-            let token = access_token;
-            async move {
-                fetch_message_detail(client, token, &id)
-                    .await
-                    .ok()
-                    .map(parse_message_detail)
-            }
-        })
-        .buffer_unordered(10)
-        .filter_map(|x| async { x })
-        .collect()
-        .await;
-
-    // Save to database (spawn_blocking to avoid blocking tokio)
-    let app_clone = app.clone();
-    tokio::task::spawn_blocking(move || {
-        upsert_emails(&app_clone, parsed_emails).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| format!("DB task failed: {}", e))??;
-
     Ok(())
 }
 

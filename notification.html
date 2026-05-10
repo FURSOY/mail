@@ -350,7 +350,16 @@
       render();
       resizeWindow();
       win.show();
-      extendTimer(5000); // +5s to remaining time
+      
+      const duration = data.duration !== undefined ? data.duration : 5000;
+      const bar = document.getElementById('progressBar');
+      if (duration === 0) {
+        clearGlobalTimer();
+        if (bar) bar.style.display = 'none';
+      } else {
+        if (bar) bar.style.display = 'block';
+        extendTimer(duration);
+      }
     }
 
     // ── Dismiss one with animation (timer continues unchanged) ──

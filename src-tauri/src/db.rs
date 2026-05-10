@@ -87,6 +87,14 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            history_id TEXT
+        )",
+        [],
+    )?;
+
     Ok(())
 }
 
@@ -304,4 +312,43 @@ pub fn get_inbox_unread_count(app: tauri::AppHandle) -> Result<i64, String> {
         .map_err(|e| e.to_string())?;
 
     Ok(count)
+}
+
+// ── Sync state (history ID) ──
+
+pub fn get_history_id(app: &AppHandle) -> Option<String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(db_path).ok()?;
+    conn.query_row(
+        "SELECT history_id FROM sync_state WHERE id = 1",
+        [],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .ok()
+    .flatten()
+}
+
+pub fn set_history_id(app: &AppHandle, history_id: &str) -> Result<(), String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO sync_state (id, history_id) VALUES (1, ?1)
+         ON CONFLICT(id) DO UPDATE SET history_id = excluded.history_id",
+        params![history_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn delete_emails_by_ids(app: &AppHandle, ids: &[String]) -> Result<(), String> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let db_path = get_db_path(app);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+    let sql = format!("DELETE FROM emails WHERE id IN ({})", placeholders.join(","));
+    let params: Vec<&dyn rusqlite::types::ToSql> = ids.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+    conn.execute(&sql, params.as_slice()).map_err(|e| e.to_string())?;
+    Ok(())
 }

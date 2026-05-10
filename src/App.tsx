@@ -2,14 +2,10 @@ import { useState, useEffect, useRef, useCallback, useTransition, type ReactNode
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { Inbox, Send, Archive, Search, Command, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw } from "lucide-react";
-import NotificationWindow from "./NotificationWindow";
+import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud } from "lucide-react";
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import "./index.css";
-
-/** Background polling when logged in (ms). Coalesced server-side if sync overlaps. */
-const SYNC_INTERVAL_MS = 12_000;
 
 function decodeBasicHtmlEntities(html: string): string {
   const codeToChar = (code: number) => {
@@ -156,13 +152,29 @@ interface AuthInfo {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'inbox' | 'sent' | 'archive' | 'spam' | 'trash'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'sent' | 'archive' | 'spam' | 'trash' | 'settings'>('inbox');
   const [selectedMail, setSelectedMail] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<string>("Not authenticated");
   /** Kullanıcı yenile / giriş sonrası senkron — belirgin gösterge, buton kilidi */
   const [isUserSyncing, setIsUserSyncing] = useState(false);
   /** Arka plan polling — hafif; etkileşimi kilitlemez */
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+  
+  // Settings
+  const [syncIntervalValue, setSyncIntervalValue] = useState(() => {
+    const saved = localStorage.getItem("fursoy_sync_interval");
+    return saved ? parseInt(saved, 10) : 12;
+  });
+  const [notifDuration, setNotifDuration] = useState(() => {
+    const saved = localStorage.getItem("fursoy_notif_duration");
+    return saved ? parseInt(saved, 10) : 5;
+  });
+  const [notifInfinite, setNotifInfinite] = useState(() => {
+    return localStorage.getItem("fursoy_notif_infinite") === "true";
+  });
+  const [pauseOnFullscreen, setPauseOnFullscreen] = useState(() => {
+    return localStorage.getItem("fursoy_pause_on_fullscreen") === "true";
+  });
   const [emails, setEmails] = useState<Email[]>([]);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<AuthInfo | null>(null);
@@ -178,6 +190,13 @@ function App() {
   const [verificationCopyState, setVerificationCopyState] = useState<"idle" | "copied">("idle");
   const [inboxUnread, setInboxUnread] = useState(0);
   const [tokenExpired, setTokenExpired] = useState(false);
+  
+  // Updater States
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState<{ version: string, date: string, body: string } | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<{ downloaded: number, total: number } | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -194,6 +213,14 @@ function App() {
   const [, startDataTransition] = useTransition();
   const activeTabRef = useRef(activeTab); // Track current tab for interval callbacks
   activeTabRef.current = activeTab; // Keep in sync
+  const syncIntervalValueRef = useRef(syncIntervalValue);
+  syncIntervalValueRef.current = syncIntervalValue;
+  const notifDurationRef = useRef(notifDuration);
+  notifDurationRef.current = notifDuration;
+  const notifInfiniteRef = useRef(notifInfinite);
+  notifInfiniteRef.current = notifInfinite;
+  const pauseOnFullscreenRef = useRef(pauseOnFullscreen);
+  pauseOnFullscreenRef.current = pauseOnFullscreen;
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -205,6 +232,59 @@ function App() {
     setToasts(prev => [...prev.slice(-2), { id, msg, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
+
+  const checkForUpdates = async (showUIMessages = false) => {
+    try {
+      if (showUIMessages) setIsCheckingUpdate(true);
+      setUpdateError(null);
+      const update = await check();
+      
+      if (update) {
+        setUpdateAvailable({ version: update.version, date: update.date || '', body: update.body || '' });
+        showToast(`Yeni bir güncelleme mevcut: v${update.version}`, "info");
+      } else {
+        setUpdateAvailable(null);
+        if (showUIMessages) showToast("Mevcut sürüm güncel.", "success");
+      }
+    } catch (e) {
+      console.error("Update check failed:", e);
+      setUpdateError("Güncelleme kontrolü başarısız oldu.");
+      if (showUIMessages) showToast("Güncelleme kontrolü başarısız.", "error");
+    } finally {
+      if (showUIMessages) setIsCheckingUpdate(false);
+    }
+  };
+
+  const installUpdate = async () => {
+    const update = await check();
+    if (!update) return;
+
+    try {
+      setUpdateProgress({ downloaded: 0, total: 100 });
+      let downloaded = 0;
+      let totalLength = 0;
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case 'Started':
+            totalLength = event.data.contentLength || 0;
+            setUpdateProgress({ downloaded: 0, total: totalLength });
+            break;
+          case 'Progress':
+            downloaded += event.data.chunkLength;
+            setUpdateProgress({ downloaded, total: totalLength });
+            break;
+          case 'Finished':
+            setUpdateProgress(null);
+            break;
+        }
+      });
+      await relaunch();
+    } catch (e) {
+      console.error("Update install failed", e);
+      setUpdateError("Güncelleme yüklenirken bir hata oluştu.");
+      setUpdateProgress(null);
+    }
+  };
 
   useEffect(() => {
     const unlistenPromise = listen<{ actionId: string, notification: { title: string, body: string } }>('notification-action', async (event) => {
@@ -224,6 +304,11 @@ function App() {
     return () => {
       unlistenPromise.then(unlisten => unlisten());
     };
+  }, []);
+
+  // Check update on startup
+  useEffect(() => {
+    void checkForUpdates(false);
   }, []);
 
   // Load emails by current tab from local DB
@@ -289,7 +374,8 @@ function App() {
         await invoke("show_custom_notification", {
           title: notifTitle,
           body: notifBody,
-          code: code || null
+          code: code || null,
+          duration: notifInfiniteRef.current ? 0 : notifDurationRef.current * 1000
         });
       }
     } catch (e) {
@@ -310,8 +396,14 @@ function App() {
     clearPeriodicSync();
     syncIntervalRef.current = setInterval(() => {
       void backgroundSyncRef.current();
-    }, SYNC_INTERVAL_MS);
+    }, syncIntervalValueRef.current * 1000);
   };
+
+  useEffect(() => {
+    if (accessToken) {
+      startPeriodicSync();
+    }
+  }, [syncIntervalValue]);
 
   // Background sync — fetch from Gmail and update local DB; uses syncWithAutoRefresh for all Gmail calls
   const backgroundSync = async (
@@ -320,6 +412,20 @@ function App() {
   ): Promise<boolean> => {
     const token = tokenOverride ?? accessTokenRef.current;
     if (!token) return false;
+
+    // Check for fullscreen if setting is enabled
+    if (pauseOnFullscreenRef.current) {
+      try {
+        const isFullscreen = await invoke<boolean>("is_system_fullscreen");
+        if (isFullscreen) {
+          console.log("System in fullscreen/game mode, skipping background sync.");
+          return false;
+        }
+      } catch (e) {
+        console.error("Fullscreen check failed:", e);
+      }
+    }
+
     const userInitiated = opts?.userInitiated ?? false;
     try {
       if (userInitiated) setIsUserSyncing(true);
@@ -709,6 +815,15 @@ function App() {
           >
             <Trash2 className="w-4 h-4" /> Trash
           </button>
+
+          <div className="my-2 border-t border-white/5" />
+
+          <button 
+            onClick={() => goToTab("settings")}
+            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+          >
+            <Settings className="w-4 h-4" /> Ayarlar
+          </button>
           </nav>
 
           <div className="p-2 mt-auto">
@@ -781,8 +896,159 @@ function App() {
           </div>
         )}
 
-        {/* MAIL LIST */}
-        <section className={`flex flex-col border-r border-white/5 bg-[#09090b] ${selectedMail ? 'hidden md:flex md:w-80 lg:w-96' : 'flex-1 md:w-80 lg:w-96 md:flex-none'}`}>
+        {/* MAIN CONTENT AREA */}
+        {activeTab === 'settings' ? (
+          <section className="flex-1 overflow-y-auto bg-[#0a0a0c] p-8">
+            <div className="max-w-2xl mx-auto">
+              <h2 className="text-2xl font-bold text-zinc-100 mb-6 flex items-center gap-2">
+                <Settings className="w-6 h-6" />
+                Ayarlar
+              </h2>
+
+              <div className="space-y-8">
+                {/* Sync Interval */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-200 mb-1">Senkronizasyon Sıklığı</h3>
+                  <p className="text-xs text-zinc-500 mb-4">Arka planda maillerin kaç saniyede bir kontrol edileceğini belirleyin.</p>
+                  
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="number" 
+                      min="5" 
+                      max="300"
+                      value={syncIntervalValue} 
+                      onChange={(e) => {
+                        let val = parseInt(e.target.value, 10) || 5;
+                        setSyncIntervalValue(val);
+                        localStorage.setItem("fursoy_sync_interval", val.toString());
+                      }}
+                      className="w-24 bg-[#09090b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500/50 outline-none" 
+                    />
+                    <span className="text-sm text-zinc-400">saniye</span>
+                  </div>
+                </div>
+
+                {/* Notification Duration */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-200 mb-1">Bildirim Ekranda Kalma Süresi</h3>
+                  <p className="text-xs text-zinc-500 mb-4">Yeni mail bildirimi geldiğinde ekranda ne kadar süre kalacağını belirleyin.</p>
+                  
+                  <div className="space-y-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifInfinite}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setNotifInfinite(checked);
+                          localStorage.setItem("fursoy_notif_infinite", checked.toString());
+                        }}
+                        className="w-4 h-4 rounded border-white/20 bg-[#09090b] text-blue-500 focus:ring-0 focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-zinc-300">Hiç kapanmasın (Süresiz)</span>
+                    </label>
+
+                    <div className={`flex items-center gap-3 transition-opacity ${notifInfinite ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="60"
+                        value={notifDuration} 
+                        onChange={(e) => {
+                          let val = parseInt(e.target.value, 10) || 1;
+                          setNotifDuration(val);
+                          localStorage.setItem("fursoy_notif_duration", val.toString());
+                        }}
+                        disabled={notifInfinite}
+                        className="w-24 bg-[#09090b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500/50 outline-none disabled:bg-transparent" 
+                      />
+                      <span className="text-sm text-zinc-400">saniye</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance Optimization */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-200 mb-1">Performans ve Oyun Modu</h3>
+                  <p className="text-xs text-zinc-500 mb-4">Sistem kaynaklarını verimli kullanmak için ek ayarlar.</p>
+                  
+                  <div className="space-y-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={pauseOnFullscreen}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setPauseOnFullscreen(checked);
+                          localStorage.setItem("fursoy_pause_on_fullscreen", checked.toString());
+                        }}
+                        className="w-4 h-4 rounded border-white/20 bg-[#09090b] text-blue-500 focus:ring-0 focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-zinc-300">Oyun veya tam ekranda iken senkronizasyonu durdur</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Updates */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-200 mb-1">Uygulama Güncellemeleri</h3>
+                  <p className="text-xs text-zinc-500 mb-4">FURSOY Mail'in en son özelliklerini ve güvenlik yamalarını almak için uygulamayı güncel tutun.</p>
+                  
+                  <div className="space-y-4">
+                    {!updateProgress ? (
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={() => checkForUpdates(true)}
+                          disabled={isCheckingUpdate}
+                          className="px-4 py-2 bg-[#09090b] hover:bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {isCheckingUpdate ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
+                          {isCheckingUpdate ? "Kontrol ediliyor..." : "Güncellemeleri Kontrol Et"}
+                        </button>
+                        {updateAvailable && (
+                          <button 
+                            onClick={installUpdate}
+                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm text-white font-semibold transition-colors shadow-lg shadow-blue-500/20"
+                          >
+                            v{updateAvailable.version} Sürümüne Güncelle
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-[#09090b] border border-white/10 rounded-lg p-4">
+                        <div className="flex items-center justify-between text-xs text-zinc-300 mb-2">
+                          <span className="font-medium text-blue-400">Güncelleme İndiriliyor...</span>
+                          <span>
+                            {updateProgress.total > 0 
+                              ? Math.round((updateProgress.downloaded / updateProgress.total) * 100) 
+                              : 0}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 transition-all duration-300"
+                            style={{ 
+                              width: `${updateProgress.total > 0 ? (updateProgress.downloaded / updateProgress.total) * 100 : 0}%` 
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-zinc-500 mt-2">
+                          İndirme tamamlandığında uygulama otomatik olarak yeniden başlatılacaktır. Lütfen bekleyin.
+                        </p>
+                      </div>
+                    )}
+                    {updateError && (
+                      <p className="text-xs text-red-400 font-medium">{updateError}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <>
+            {/* MAIL LIST */}
+            <section className={`flex flex-col border-r border-white/5 bg-[#09090b] ${selectedMail ? 'hidden md:flex md:w-80 lg:w-96' : 'flex-1 md:w-80 lg:w-96 md:flex-none'}`}>
           <div className="h-12 flex items-center px-4 border-b border-white/5 justify-between shrink-0">
             <div className="flex items-center gap-2.5">
               <h2 className="font-semibold text-zinc-100 text-sm capitalize">{activeTab}</h2>
@@ -1101,6 +1367,8 @@ function App() {
               <p className="text-xs text-zinc-700 mt-1">Select an email to read it here.</p>
             </div>
           </main>
+        )}
+          </>
         )}
       </div>
 

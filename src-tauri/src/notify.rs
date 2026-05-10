@@ -11,9 +11,15 @@ pub struct NotificationPayload {
     pub title: String,
     pub body: String,
     pub code: Option<String>,
+    pub duration: Option<u32>,
 }
 
 pub struct PendingNotification(pub Mutex<Option<NotificationPayload>>);
+
+#[tauri::command]
+pub fn is_system_fullscreen() -> bool {
+    is_fullscreen()
+}
 
 pub fn is_fullscreen() -> bool {
     unsafe {
@@ -64,12 +70,13 @@ pub async fn show_custom_notification(
     title: String,
     body: String,
     code: Option<String>,
+    duration: Option<u32>,
 ) {
     if is_fullscreen() {
         return;
     }
 
-    let payload = NotificationPayload { title, body, code };
+    let payload = NotificationPayload { title, body, code, duration };
 
     // If window already exists (hidden or visible), just send new notification
     if let Some(window) = app.get_webview_window("notification") {

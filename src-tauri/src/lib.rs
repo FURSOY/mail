@@ -72,6 +72,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             auth::start_google_oauth,
             auth::refresh_access_token,
@@ -90,7 +92,8 @@ pub fn run() {
             gmail::send_email,
             notify::show_custom_notification,
             notify::get_pending_notification,
-            notify::get_screen_info
+            notify::get_screen_info,
+            notify::is_system_fullscreen
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
