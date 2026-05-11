@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useTransition, type ReactNode
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu } from "lucide-react";
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -39,6 +40,39 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+function escapeHtml(text: string): string {
+  return decodeBasicHtmlEntities(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeEmailHtml(html: string, fallback: string): string {
+  const source = (html || "").trim();
+  if (!source) {
+    return `<div class="plain-text">${escapeHtml(fallback || "").replace(/\n/g, "<br/>")}</div>`;
+  }
+
+  const styles = (source.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi) || []).join("\n");
+  const cleaned = source
+    .replace(/<!doctype[\s\S]*?>/gi, "")
+    .replace(/<html\b[^>]*>/gi, "")
+    .replace(/<\/html>/gi, "")
+    .replace(/<head\b[\s\S]*?<\/head>/gi, "")
+    .replace(/<meta\b[^>]*>/gi, "")
+    .replace(/<base\b[^>]*>/gi, "")
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s(href|src|action)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, "")
+    .replace(/\s(href|src|action)\s*=\s*javascript:[^\s>]*/gi, "");
+
+  const bodyMatch = cleaned.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
+  return `${styles}${bodyMatch ? bodyMatch[1] : cleaned}`;
+}
+
 /** Remove ZWSP etc.; collapse spaced digits from HTML chunks. */
 function normalizeOtpPlaintext(text: string): string {
   let s = text.replace(/[\u200B-\u200D\uFEFF\u2060]/g, "");
@@ -53,11 +87,20 @@ function normalizeOtpPlaintext(text: string): string {
   return s;
 }
 
-const OTP_CONTEXT_RE =
-  /(?:code|kod|kodu|verification|doğrulama|onay|şifre|password|pin|otp|sign[\s-]?in|oturum|confirm|tek\s*kullanım|one[\s-]?time|güvenlik|security)/i;
-
 const NEGATIVE_CONTEXT_RE = 
   /(?:po box|box|parkway|amphitheatre|tl|usd|eur|\$|€|tel|phone|fax|adres|address|street|sokak|cadde|mahalle|bulvar|kimlik|id|no\.|numarası)/i;
+
+const STRONG_OTP_CONTEXT_RE =
+  /(?:verification|verify|dogrulama|doğrulama|confirm|confirmation|onay|login|sign[\s-]?in|oturum|authentication|auth|two[\s-]?factor|2fa|mfa|one[\s-]?time|tek\s*kullanım|tek\s*kullanim)[\s\w.,:;'"()/-]{0,36}(?:code|kod|kodu|pin|otp|passcode|password|sifre|şifre)|(?:code|kod|kodu|pin|otp|passcode|verification code|security code|login code|confirmation code|one[\s-]?time password|one[\s-]?time code|2fa code|mfa code|sifre|şifre)/i;
+
+const DIRECT_OTP_PREFIX_RE =
+  /(?:code|kod|kodu|pin|otp|passcode|verification code|security code|login code|confirmation code|sifre|şifre)\s*(?:is|:|-|=|→)?\s*$/i;
+
+const BROAD_NEGATIVE_CONTEXT_RE =
+  /(?:iso(?:\/iec)?|certified|certificate|certification|standard|platform|developers?|community|experts?|subscribers?|followers?|members?|users?|customers?|blog|article|release|changelog|version|copyright|po box|box|parkway|amphitheatre|tl|try|usd|eur|\$|€|tel|phone|fax|adres|address|street|sokak|cadde|mahalle|bulvar|kimlik|id|no\.|numarası|numarasi|invoice|order|ticket|case|ref|reference)/i;
+
+const METRIC_SUFFIX_RE = /^\d+(?:\.\d+)?[kmb]$/i;
+const YEAR_OR_STANDARD_RE = /^(?:19|20)\d{2}$|^27001$|^27701$|^22301$|^9001$|^42001$/;
 
 /** Detect OTP / verification codes using advanced context scoring. */
 function extractVerificationCode(email: Email): string | null {
@@ -76,7 +119,7 @@ function extractVerificationCode(email: Email): string | null {
   // Find alphanumeric candidates like A1B2C3 (uppercase, 4-10 chars, mixing letters and numbers)
   const alphaNumRegex = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*)\b/g;
   while ((m = alphaNumRegex.exec(text)) !== null) {
-     if (m[1].length >= 4 && m[1].length <= 10) {
+     if (m[1].length >= 4 && m[1].length <= 10 && !METRIC_SUFFIX_RE.test(m[1])) {
        candidates.push({ code: m[1], score: 0, index: m.index });
      }
   }
@@ -84,23 +127,38 @@ function extractVerificationCode(email: Email): string | null {
   if (candidates.length === 0) return null;
 
   for (const c of candidates) {
-    const windowStart = Math.max(0, c.index - 100);
-    const windowEnd = Math.min(text.length, c.index + c.code.length + 100);
+    if (METRIC_SUFFIX_RE.test(c.code) || YEAR_OR_STANDARD_RE.test(c.code)) {
+      c.score = -999;
+      continue;
+    }
+
+    const windowStart = Math.max(0, c.index - 140);
+    const windowEnd = Math.min(text.length, c.index + c.code.length + 140);
     const contextStr = text.slice(windowStart, windowEnd);
+    const before = text.slice(Math.max(0, c.index - 60), c.index);
+    const after = text.slice(c.index + c.code.length, Math.min(text.length, c.index + c.code.length + 60));
     
     // Positive keywords
-    if (OTP_CONTEXT_RE.test(contextStr)) c.score += 50;
+    if (STRONG_OTP_CONTEXT_RE.test(contextStr)) c.score += 80;
     
     // Direct prefixes like "kod: 123456"
     const directPrefix = new RegExp(`(?:code|kod|kodu|verification|doğrulama|otp|pin)[:\\s\\-]*${c.code}`, 'i');
-    if (directPrefix.test(contextStr)) c.score += 100;
+    if (directPrefix.test(contextStr) || DIRECT_OTP_PREFIX_RE.test(before)) c.score += 140;
+    if (/(?:expires?|valid|dakika|minute|min|within|use|enter|gir|kullan)/i.test(contextStr)) {
+      c.score += 25;
+    }
 
     // Negative keywords
-    if (NEGATIVE_CONTEXT_RE.test(contextStr)) c.score -= 80;
+    if (NEGATIVE_CONTEXT_RE.test(contextStr) || BROAD_NEGATIVE_CONTEXT_RE.test(contextStr)) c.score -= 120;
+    if (/^[A-Z]{2,}\d+$/.test(c.code) && /(?:version|release|build|ticket|issue|case|ref)/i.test(contextStr)) c.score -= 120;
+    if (/^[A-Z0-9]{4,10}$/.test(c.code) && /[A-Z]/.test(c.code) && !STRONG_OTP_CONTEXT_RE.test(contextStr)) c.score -= 80;
+    if (/^\d+$/.test(c.code) && /[%+]/.test(before.slice(-2) + after.slice(0, 2))) c.score -= 100;
+    if (/^\d+$/.test(c.code) && /(?:\bISO(?:\/IEC)?\s*$|\bISO(?:\/IEC)?\s+)/i.test(before.slice(-16) + after.slice(0, 16))) c.score -= 160;
 
     // Length heuristic: 6 is most common
     if (c.code.length === 6 && /^\d+$/.test(c.code)) c.score += 20;
-    else if (/^\d+$/.test(c.code) && (c.code.length === 4 || c.code.length === 8)) c.score += 10;
+    else if (/^\d+$/.test(c.code) && c.code.length === 8) c.score += 10;
+    else if (/^\d+$/.test(c.code) && c.code.length === 4) c.score -= 15;
 
     // Position score: Earlier in the email is slightly better
     c.score -= (c.index / text.length) * 10;
@@ -111,7 +169,7 @@ function extractVerificationCode(email: Email): string | null {
     }
   }
 
-  const validCandidates = candidates.filter(c => c.score >= 40);
+  const validCandidates = candidates.filter(c => c.score >= 70);
   if (validCandidates.length === 0) return null;
 
   validCandidates.sort((a, b) => b.score - a.score);
@@ -530,9 +588,10 @@ function App() {
     });
 
     const handleIframeMessage = (e: MessageEvent) => {
-      if (e.data && e.data.type === "open_url" && e.data.url) {
-        import("@tauri-apps/plugin-opener").then(opener => {
-          opener.openUrl(e.data.url).catch(console.error);
+      if (e.data && e.data.type === "open_url" && typeof e.data.url === "string") {
+        openUrl(e.data.url).catch((err) => {
+          console.error("Failed to open mail link:", err);
+          showToast("Link tarayıcıda açılamadı.", "error");
         });
       }
     };
@@ -763,6 +822,7 @@ function App() {
   const unreadCount = inboxUnread;
 
   const verificationCode = activeMail ? extractVerificationCode(activeMail) : null;
+  const activeMailHtml = activeMail ? sanitizeEmailHtml(activeMail.body_html, activeMail.snippet) : "";
 
   useEffect(() => {
     setVerificationCopyState("idle");
@@ -1351,9 +1411,14 @@ function App() {
                           <base target="_blank" href="https://mail.google.com/">
                           <style>
                             * { box-sizing: border-box; }
-                            html, body { height: 100%; margin: 0; }
-                            body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1a1a1a; overflow-y: auto; }
+                            html, body { min-height: 100%; margin: 0; }
+                            html { background: #fff; }
+                            body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1a1a1a; overflow: auto; overflow-wrap: anywhere; }
                             img { max-width: 100% !important; height: auto !important; }
+                            table { max-width: 100% !important; }
+                            td, th { max-width: 100%; }
+                            pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+                            .plain-text { white-space: pre-wrap; }
                             a { color: #2563eb; }
                             /* Custom scrollbar matching app theme */
                             ::-webkit-scrollbar { width: 5px; }
@@ -1363,17 +1428,38 @@ function App() {
                           </style>
                         </head>
                         <body>
-                          ${(activeMail.body_html || activeMail.snippet).replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")}
+                          ${activeMailHtml}
                           <script>
+                            function sendOpenUrl(url) {
+                              if (!url || url.charAt(0) === "#") return false;
+                              try {
+                                window.parent.postMessage({ type: "open_url", url: new URL(url, document.baseURI).href }, "*");
+                                return true;
+                              } catch (_) {
+                                return false;
+                              }
+                            }
+
                             document.addEventListener("click", function(e) {
-                              var target = e.target.closest("a");
-                              if (target) {
-                                var url = target.getAttribute("href") || target.href;
-                                if (url && !url.startsWith("#")) {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  window.parent.postMessage({ type: "open_url", url: target.href }, "*");
-                                }
+                              var node = e.target && e.target.nodeType === 1 ? e.target : e.target && e.target.parentElement;
+                              var target = node && node.closest ? node.closest("a[href], area[href]") : null;
+                              if (!target) return;
+
+                              var url = target.getAttribute("href") || target.href;
+                              if (sendOpenUrl(url)) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }
+                            }, true);
+
+                            document.addEventListener("submit", function(e) {
+                              var form = e.target;
+                              if (!form || !form.getAttribute) return;
+
+                              var url = form.getAttribute("action");
+                              if (sendOpenUrl(url)) {
+                                e.preventDefault();
+                                e.stopPropagation();
                               }
                             }, true);
                           </script>
