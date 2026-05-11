@@ -73,6 +73,25 @@ function sanitizeEmailHtml(html: string, fallback: string): string {
   return `${styles}${bodyMatch ? bodyMatch[1] : cleaned}`;
 }
 
+const LARGE_BODY_RENDER_LIMIT = 750_000;
+const MAX_LABEL_CACHE = 5;
+
+function byteLength(text: string): number {
+  return new Blob([text]).size;
+}
+
+function buildRenderableEmailHtml(html: string, fallback: string, mode: RenderMode): string {
+  if (mode === "simple" || byteLength(html) > LARGE_BODY_RENDER_LIMIT) {
+    const plain = stripHtml(html || fallback);
+    return `<div class="plain-text">${escapeHtml(plain || fallback || "").replace(/\n/g, "<br/>")}</div>`;
+  }
+
+  return sanitizeEmailHtml(html, fallback).replace(
+    /\s(src|href)\s*=\s*(["'])data:([^"']{250000,})\2/gi,
+    ""
+  );
+}
+
 /** Remove ZWSP etc.; collapse spaced digits from HTML chunks. */
 function normalizeOtpPlaintext(text: string): string {
   let s = text.replace(/[\u200B-\u200D\uFEFF\u2060]/g, "");
@@ -81,13 +100,13 @@ function normalizeOtpPlaintext(text: string): string {
   s = s.replace(/\b(?:\d[\s\u00A0]){3,11}\d\b/g, (m) => m.replace(/[\s\u00A0]+/g, ""));
   // Collapse "123 456" or "123-456" style
   s = s.replace(/\b(\d{3,4})[\s-](\d{3,4})\b/g, (m, g1, g2) => {
-     if (g1.length + g2.length >= 4 && g1.length + g2.length <= 8) return g1 + g2;
-     return m;
+    if (g1.length + g2.length >= 4 && g1.length + g2.length <= 8) return g1 + g2;
+    return m;
   });
   return s;
 }
 
-const NEGATIVE_CONTEXT_RE = 
+const NEGATIVE_CONTEXT_RE =
   /(?:po box|box|parkway|amphitheatre|tl|usd|eur|\$|€|tel|phone|fax|adres|address|street|sokak|cadde|mahalle|bulvar|kimlik|id|no\.|numarası)/i;
 
 const STRONG_OTP_CONTEXT_RE =
@@ -102,26 +121,30 @@ const BROAD_NEGATIVE_CONTEXT_RE =
 const METRIC_SUFFIX_RE = /^\d+(?:\.\d+)?[kmb]$/i;
 const YEAR_OR_STANDARD_RE = /^(?:19|20)\d{2}$|^27001$|^27701$|^22301$|^9001$|^42001$/;
 
+type OtpMode = "off" | "balanced" | "strict";
+type RenderMode = "full" | "simple";
+
 /** Detect OTP / verification codes using advanced context scoring. */
-function extractVerificationCode(email: Email): string | null {
+function extractVerificationCode(email: { subject: string; snippet: string; body_html: string }, mode: OtpMode = "balanced"): string | null {
+  if (mode === "off") return null;
   const raw = `${email.subject} ${email.snippet} ${stripHtml(email.body_html)}`;
   const text = normalizeOtpPlaintext(raw);
-  
+
   const candidates: { code: string; score: number; index: number }[] = [];
 
   // Find all 4-8 digit numbers
   const numRegex = /\b(\d{4,8})\b/g;
   let m;
   while ((m = numRegex.exec(text)) !== null) {
-     candidates.push({ code: m[1], score: 0, index: m.index });
+    candidates.push({ code: m[1], score: 0, index: m.index });
   }
 
   // Find alphanumeric candidates like A1B2C3 (uppercase, 4-10 chars, mixing letters and numbers)
   const alphaNumRegex = /\b([A-Z]+[0-9]+[A-Z0-9]*|[0-9]+[A-Z]+[A-Z0-9]*)\b/g;
   while ((m = alphaNumRegex.exec(text)) !== null) {
-     if (m[1].length >= 4 && m[1].length <= 10 && !METRIC_SUFFIX_RE.test(m[1])) {
-       candidates.push({ code: m[1], score: 0, index: m.index });
-     }
+    if (m[1].length >= 4 && m[1].length <= 10 && !METRIC_SUFFIX_RE.test(m[1])) {
+      candidates.push({ code: m[1], score: 0, index: m.index });
+    }
   }
 
   if (candidates.length === 0) return null;
@@ -137,13 +160,15 @@ function extractVerificationCode(email: Email): string | null {
     const contextStr = text.slice(windowStart, windowEnd);
     const before = text.slice(Math.max(0, c.index - 60), c.index);
     const after = text.slice(c.index + c.code.length, Math.min(text.length, c.index + c.code.length + 60));
-    
+
     // Positive keywords
     if (STRONG_OTP_CONTEXT_RE.test(contextStr)) c.score += 80;
-    
+
     // Direct prefixes like "kod: 123456"
     const directPrefix = new RegExp(`(?:code|kod|kodu|verification|doğrulama|otp|pin)[:\\s\\-]*${c.code}`, 'i');
-    if (directPrefix.test(contextStr) || DIRECT_OTP_PREFIX_RE.test(before)) c.score += 140;
+    const hasDirectOtpPrefix = directPrefix.test(contextStr) || DIRECT_OTP_PREFIX_RE.test(before);
+    if (hasDirectOtpPrefix) c.score += 140;
+    if (mode === "strict" && !hasDirectOtpPrefix) c.score -= 100;
     if (/(?:expires?|valid|dakika|minute|min|within|use|enter|gir|kullan)/i.test(contextStr)) {
       c.score += 25;
     }
@@ -169,7 +194,7 @@ function extractVerificationCode(email: Email): string | null {
     }
   }
 
-  const validCandidates = candidates.filter(c => c.score >= 70);
+  const validCandidates = candidates.filter(c => c.score >= (mode === "strict" ? 140 : 70));
   if (validCandidates.length === 0) return null;
 
   validCandidates.sort((a, b) => b.score - a.score);
@@ -191,16 +216,22 @@ function ToolbarTip({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-interface Email {
+interface EmailSummary {
   id: string;
   sender: string;
   recipient: string;
   subject: string;
   snippet: string;
-  body_html: string;
   date: number;
   unread: boolean;
   label: string;
+}
+
+interface MailDebugMetrics {
+  openedCount: number;
+  lastBodyBytes: number;
+  cachedLabels: number;
+  cachedMessages: number;
 }
 
 interface AuthInfo {
@@ -217,7 +248,7 @@ function App() {
   const [isUserSyncing, setIsUserSyncing] = useState(false);
   /** Arka plan polling — hafif; etkileşimi kilitlemez */
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
-  
+
   // Settings
   const [syncIntervalValue, setSyncIntervalValue] = useState(() => {
     const saved = localStorage.getItem("fursoy_sync_interval");
@@ -233,7 +264,27 @@ function App() {
   const [pauseOnFullscreen, setPauseOnFullscreen] = useState(() => {
     return localStorage.getItem("fursoy_pause_on_fullscreen") === "true";
   });
-  const [emails, setEmails] = useState<Email[]>([]);
+  const [lazyBodyLoading, setLazyBodyLoading] = useState(() => {
+    return localStorage.getItem("fursoy_lazy_body_loading") !== "false";
+  });
+  const [renderMode, setRenderMode] = useState<RenderMode>(() => {
+    return localStorage.getItem("fursoy_render_mode") === "simple" ? "simple" : "full";
+  });
+  const [otpMode, setOtpMode] = useState<OtpMode>(() => {
+    const saved = localStorage.getItem("fursoy_otp_mode");
+    return saved === "off" || saved === "strict" ? saved : "balanced";
+  });
+  const [emails, setEmails] = useState<EmailSummary[]>([]);
+  const [selectedMailBody, setSelectedMailBody] = useState("");
+  const [selectedMailBodyId, setSelectedMailBodyId] = useState<string | null>(null);
+  const [isBodyLoading, setIsBodyLoading] = useState(false);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+  const [debugMetrics, setDebugMetrics] = useState<MailDebugMetrics>({
+    openedCount: 0,
+    lastBodyBytes: 0,
+    cachedLabels: 0,
+    cachedMessages: 0,
+  });
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<AuthInfo | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -249,13 +300,13 @@ function App() {
   const [verificationCopyState, setVerificationCopyState] = useState<"idle" | "copied">("idle");
   const [inboxUnread, setInboxUnread] = useState(0);
   const [tokenExpired, setTokenExpired] = useState(false);
-  
+
   // Updater States
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<{ version: string, date: string, body: string } | null>(null);
   const [updateProgress, setUpdateProgress] = useState<{ downloaded: number, total: number } | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
-  
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -268,7 +319,7 @@ function App() {
   const knownEmailIdsRef = useRef<Set<string>>(new Set());
   const recentlyReadRef = useRef<Set<string>>(new Set());
   const isFirstSyncRef = useRef(true);
-  const tabEmailCacheRef = useRef<Partial<Record<string, Email[]>>>({});
+  const tabEmailCacheRef = useRef<Partial<Record<string, EmailSummary[]>>>({});
   const [, startTabTransition] = useTransition();
   const [, startDataTransition] = useTransition();
   const activeTabRef = useRef(activeTab); // Track current tab for interval callbacks
@@ -298,7 +349,7 @@ function App() {
       if (showUIMessages) setIsCheckingUpdate(true);
       setUpdateError(null);
       const update = await check();
-      
+
       if (update) {
         setUpdateAvailable({ version: update.version, date: update.date || '', body: update.body || '' });
         showToast(`Yeni bir güncelleme mevcut: v${update.version}`, "info");
@@ -365,7 +416,7 @@ function App() {
     const unlistenPluginPromise = listen<{ actionId: string, notification: { title: string, body: string } }>('notification-action', async (event) => {
       const payload = event.payload?.notification;
       if (!payload) return;
-      
+
       const key = (payload.title || "") + (payload.body || "");
       const emailId = recentNotificationsRef.current[key];
       await openNotificationMail(emailId || "");
@@ -386,18 +437,42 @@ function App() {
   const loadEmails = async (tab?: string) => {
     try {
       const label = tab || activeTabRef.current;
-      const result = await invoke<Email[]>("get_emails_by_label", { label });
-      
+      const result = await invoke<EmailSummary[]>("get_emails_by_label", { label });
+
       // Override unread status if it was recently marked as read locally
-      const adjusted = result.map(m => 
+      const adjusted = result.map(m =>
         recentlyReadRef.current.has(m.id) ? { ...m, unread: false } : m
       );
-      
+
       tabEmailCacheRef.current[label] = adjusted;
+      const cacheKeys = Object.keys(tabEmailCacheRef.current);
+      while (cacheKeys.length > MAX_LABEL_CACHE) {
+        const oldest = cacheKeys.shift();
+        if (oldest && oldest !== label) delete tabEmailCacheRef.current[oldest];
+      }
+      const cachedLabels = Object.keys(tabEmailCacheRef.current).length;
+      const cachedMessages = Object.values(tabEmailCacheRef.current).reduce((sum, list) => sum + (list?.length || 0), 0);
+      setDebugMetrics(prev => ({ ...prev, cachedLabels, cachedMessages }));
       startDataTransition(() => setEmails(adjusted));
     } catch (e) {
       console.error("Failed to load emails:", e);
     }
+  };
+
+  const clearPerformanceCaches = () => {
+    tabEmailCacheRef.current = {};
+    recentNotificationsRef.current = {};
+    setSelectedMailBody("");
+    setSelectedMailBodyId(null);
+    setBodyError(null);
+    setDebugMetrics({
+      openedCount: 0,
+      lastBodyBytes: 0,
+      cachedLabels: 0,
+      cachedMessages: 0,
+    });
+    void loadEmails(activeTabRef.current);
+    showToast("GeÃ§ici cache temizlendi.", "success");
   };
 
   // Auto-refresh token and retry on 401
@@ -435,14 +510,15 @@ function App() {
     } catch { return 0; }
   };
 
-  const notifyNewEmails = useCallback(async (newEmails: Email[]) => {
+  const notifyNewEmails = useCallback(async (newEmails: EmailSummary[]) => {
     if (newEmails.length === 0) return;
 
     try {
       for (const email of newEmails.slice(0, 5)) {
         const senderName = email.sender.split("<")[0].replace(/"/g, "").trim() || email.sender;
-        const code = extractVerificationCode(email);
-        
+        const body = otpMode === "off" ? "" : await invoke<string>("get_email_body", { id: email.id }).catch(() => "");
+        const code = extractVerificationCode({ ...email, body_html: body }, otpMode);
+
         let notifTitle = senderName.slice(0, 64);
         let notifBody = (email.subject || email.snippet || "").trim().slice(0, 100) || "Yeni ileti";
 
@@ -459,7 +535,7 @@ function App() {
     } catch (e) {
       console.error("Notification error:", e);
     }
-  }, []);
+  }, [otpMode]);
 
   /** Stop background polling (logout / unmount). */
   const clearPeriodicSync = () => {
@@ -511,7 +587,7 @@ function App() {
       const newToken = await syncWithAutoRefresh(token);
       accessTokenRef.current = newToken;
 
-      const freshInbox = await invoke<Email[]>("get_emails_by_label", { label: "inbox" });
+      const freshInbox = await invoke<EmailSummary[]>("get_emails_by_label", { label: "inbox" });
 
       const newUnreadEmails = freshInbox.filter(
         e => e.unread && !knownEmailIdsRef.current.has(e.id)
@@ -653,6 +729,9 @@ function App() {
       setAccessToken(null);
       accessTokenRef.current = null;
       setEmails([]);
+      setSelectedMail(null);
+      setSelectedMailBody("");
+      setSelectedMailBodyId(null);
       setAuthStatus("Logged out.");
     } catch (e) {
       console.error("Logout failed:", e);
@@ -676,7 +755,7 @@ function App() {
     }
   };
 
-  const handleMailClick = async (mail: Email) => {
+  const handleMailClick = async (mail: EmailSummary) => {
     setSelectedMail(mail.id);
     setShowReply(false);
     setReplyText("");
@@ -684,9 +763,9 @@ function App() {
       recentlyReadRef.current.add(mail.id);
       setEmails(prev => prev.map(m => m.id === mail.id ? { ...m, unread: false } : m));
       try {
-        await invoke("mark_as_read", { 
-          accessToken: accessToken || "", 
-          messageId: mail.id 
+        await invoke("mark_as_read", {
+          accessToken: accessToken || "",
+          messageId: mail.id
         });
       } catch (e) {
         console.error("Failed to mark as read:", e);
@@ -797,6 +876,42 @@ function App() {
 
   const activeMail = emails.find(m => m.id === selectedMail);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    setSelectedMailBody("");
+    setSelectedMailBodyId(null);
+    setBodyError(null);
+    setIsBodyLoading(false);
+
+    if (!selectedMail) return;
+
+    setIsBodyLoading(true);
+    invoke<string>("get_email_body", { id: selectedMail })
+      .then((body) => {
+        if (cancelled) return;
+        setSelectedMailBody(body || "");
+        setSelectedMailBodyId(selectedMail);
+        setDebugMetrics(prev => ({
+          ...prev,
+          openedCount: prev.openedCount + 1,
+          lastBodyBytes: byteLength(body || ""),
+        }));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error("Failed to load email body:", e);
+        setBodyError("Mail gÃ¶vdesi yÃ¼klenemedi.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsBodyLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMail]);
+
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -814,15 +929,16 @@ function App() {
 
   const displayEmails = emails.filter(email => {
     if (!searchQuery) return true;
-    return email.subject.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    return email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
       email.sender.toLowerCase().includes(searchQuery.toLowerCase()) ||
       email.snippet.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const unreadCount = inboxUnread;
+  const hasLoadedActiveBody = !!activeMail && selectedMailBodyId === activeMail.id;
 
-  const verificationCode = activeMail ? extractVerificationCode(activeMail) : null;
-  const activeMailHtml = activeMail ? sanitizeEmailHtml(activeMail.body_html, activeMail.snippet) : "";
+  const verificationCode = activeMail && hasLoadedActiveBody ? extractVerificationCode({ ...activeMail, body_html: selectedMailBody }, otpMode) : null;
+  const activeMailHtml = activeMail && hasLoadedActiveBody ? buildRenderableEmailHtml(selectedMailBody, activeMail.snippet, renderMode) : "";
 
   useEffect(() => {
     setVerificationCopyState("idle");
@@ -835,7 +951,7 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#09090b] text-zinc-300 font-sans overflow-hidden select-none">
-      
+
       {/* CUSTOM TITLEBAR */}
       <div data-tauri-drag-region className="h-9 shrink-0 flex items-center justify-between pl-2 pr-0 border-b border-white/5 bg-[#09090b]" style={{ WebkitAppRegion: 'drag' } as any}>
         <div data-tauri-drag-region className="flex items-center gap-2 text-xs font-medium text-zinc-500 pl-1">
@@ -852,19 +968,19 @@ function App() {
           <span className="text-zinc-400">FURSOY Mail</span>
         </div>
         <div className="flex items-center" style={{ WebkitAppRegion: 'no-drag' } as any}>
-          <button 
+          <button
             onClick={() => getCurrentWindow().minimize()}
             className="w-11 h-9 flex items-center justify-center text-zinc-500 hover:bg-white/10 hover:text-zinc-200 transition-colors"
           >
             <Minus className="w-4 h-4" />
           </button>
-          <button 
+          <button
             onClick={() => getCurrentWindow().toggleMaximize()}
             className="w-11 h-9 flex items-center justify-center text-zinc-500 hover:bg-white/10 hover:text-zinc-200 transition-colors"
           >
             <Square className="w-3 h-3" />
           </button>
-          <button 
+          <button
             onClick={async () => {
               const window = getCurrentWindow();
               await window.hide();
@@ -891,7 +1007,7 @@ function App() {
         {/* SIDEBAR */}
         <aside className={`${mobileMenuOpen ? 'fixed left-0 top-9 bottom-0 z-50 flex shadow-2xl shadow-black/40' : 'hidden'} md:static md:z-auto md:flex w-56 bg-[#0c0c0e] border-r border-white/5 flex-col`}>
           <nav className="flex-1 p-2 pt-3 space-y-0.5">
-            <button 
+            <button
               onClick={() => goToTab("inbox")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'inbox' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
@@ -900,42 +1016,42 @@ function App() {
                 <span className="ml-auto text-[10px] bg-blue-500 text-white min-w-[18px] text-center py-0.5 px-1 rounded-full font-bold">{unreadCount}</span>
               )}
             </button>
-            <button 
+            <button
               onClick={() => goToTab("sent")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'sent' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Send className="w-4 h-4" /> Sent
             </button>
-            <button 
+            <button
               onClick={() => goToTab("archive")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'archive' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Archive className="w-4 h-4" /> Archive
-          </button>
+            </button>
 
-          <div className="my-2 border-t border-white/5" />
+            <div className="my-2 border-t border-white/5" />
 
-          <button 
-            onClick={() => goToTab("spam")}
-            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'spam' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
-          >
-            <ShieldAlert className="w-4 h-4" /> Spam
-          </button>
-          <button 
-            onClick={() => goToTab("trash")}
-            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'trash' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
-          >
-            <Trash2 className="w-4 h-4" /> Trash
-          </button>
+            <button
+              onClick={() => goToTab("spam")}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'spam' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+            >
+              <ShieldAlert className="w-4 h-4" /> Spam
+            </button>
+            <button
+              onClick={() => goToTab("trash")}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'trash' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+            >
+              <Trash2 className="w-4 h-4" /> Trash
+            </button>
 
-          <div className="my-2 border-t border-white/5" />
+            <div className="my-2 border-t border-white/5" />
 
-          <button 
-            onClick={() => goToTab("settings")}
-            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
-          >
-            <Settings className="w-4 h-4" /> Ayarlar
-          </button>
+            <button
+              onClick={() => goToTab("settings")}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+            >
+              <Settings className="w-4 h-4" /> Ayarlar
+            </button>
           </nav>
 
           <div className="p-2 mt-auto">
@@ -1022,19 +1138,19 @@ function App() {
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-zinc-200 mb-1">Senkronizasyon Sıklığı</h3>
                   <p className="text-xs text-zinc-500 mb-4">Arka planda maillerin kaç saniyede bir kontrol edileceğini belirleyin.</p>
-                  
+
                   <div className="flex items-center gap-3">
-                    <input 
-                      type="number" 
-                      min="5" 
+                    <input
+                      type="number"
+                      min="5"
                       max="300"
-                      value={syncIntervalValue} 
+                      value={syncIntervalValue}
                       onChange={(e) => {
                         let val = parseInt(e.target.value, 10) || 5;
                         setSyncIntervalValue(val);
                         localStorage.setItem("fursoy_sync_interval", val.toString());
                       }}
-                      className="w-24 bg-[#09090b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500/50 outline-none" 
+                      className="w-24 bg-[#09090b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500/50 outline-none"
                     />
                     <span className="text-sm text-zinc-400">saniye</span>
                   </div>
@@ -1044,11 +1160,11 @@ function App() {
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-zinc-200 mb-1">Bildirim Ekranda Kalma Süresi</h3>
                   <p className="text-xs text-zinc-500 mb-4">Yeni mail bildirimi geldiğinde ekranda ne kadar süre kalacağını belirleyin.</p>
-                  
+
                   <div className="space-y-4">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={notifInfinite}
                         onChange={(e) => {
                           const checked = e.target.checked;
@@ -1061,18 +1177,18 @@ function App() {
                     </label>
 
                     <div className={`flex items-center gap-3 transition-opacity ${notifInfinite ? 'opacity-40 pointer-events-none' : ''}`}>
-                      <input 
-                        type="number" 
-                        min="1" 
+                      <input
+                        type="number"
+                        min="1"
                         max="60"
-                        value={notifDuration} 
+                        value={notifDuration}
                         onChange={(e) => {
                           let val = parseInt(e.target.value, 10) || 1;
                           setNotifDuration(val);
                           localStorage.setItem("fursoy_notif_duration", val.toString());
                         }}
                         disabled={notifInfinite}
-                        className="w-24 bg-[#09090b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500/50 outline-none disabled:bg-transparent" 
+                        className="w-24 bg-[#09090b] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:border-blue-500/50 outline-none disabled:bg-transparent"
                       />
                       <span className="text-sm text-zinc-400">saniye</span>
                     </div>
@@ -1083,11 +1199,70 @@ function App() {
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-zinc-200 mb-1">Performans ve Oyun Modu</h3>
                   <p className="text-xs text-zinc-500 mb-4">Sistem kaynaklarını verimli kullanmak için ek ayarlar.</p>
-                  
-                  <div className="space-y-4">
+
+                  <div className="space-y-5">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
+                        checked={lazyBodyLoading}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setLazyBodyLoading(checked);
+                          localStorage.setItem("fursoy_lazy_body_loading", checked.toString());
+                        }}
+                        className="w-4 h-4 rounded border-white/20 bg-[#09090b] text-blue-500 focus:ring-0 focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-zinc-300">E-posta içeriğini yalnızca açıldığında yükle</span>
+                    </label>
+
+                    <div>
+                      <div className="text-xs font-medium text-zinc-300 mb-2">HTML Mail Render Modu</div>
+                      <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenderMode("full");
+                            localStorage.setItem("fursoy_render_mode", "full");
+                          }}
+                          className={`px-3 py-1.5 text-xs rounded-md transition-colors ${renderMode === "full" ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                        >
+                          Tam HTML
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenderMode("simple");
+                            localStorage.setItem("fursoy_render_mode", "simple");
+                          }}
+                          className={`px-3 py-1.5 text-xs rounded-md transition-colors ${renderMode === "simple" ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                        >
+                          Basit
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-medium text-zinc-300 mb-2">OTP Algılama</div>
+                      <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
+                        {(["off", "balanced", "strict"] as OtpMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              setOtpMode(mode);
+                              localStorage.setItem("fursoy_otp_mode", mode);
+                            }}
+                            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${otpMode === mode ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                          >
+                            {mode === "off" ? "KapalÄ±" : mode === "balanced" ? "Dengeli" : "SÄ±kÄ±"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
                         checked={pauseOnFullscreen}
                         onChange={(e) => {
                           const checked = e.target.checked;
@@ -1098,6 +1273,43 @@ function App() {
                       />
                       <span className="text-sm text-zinc-300">Oyun veya tam ekranda iken senkronizasyonu durdur</span>
                     </label>
+
+                    <div className="rounded-lg border border-white/5 bg-[#09090b] p-3">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div>
+                          <div className="text-xs font-medium text-zinc-300">Yaklaşık veri kullanımı</div>
+                          <div className="text-[10px] text-zinc-600">Gösterilen değer WebView2 RAM kullanımını içermez.</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={clearPerformanceCaches}
+                          className="px-3 py-1.5 rounded-md border border-white/10 text-xs text-zinc-300 hover:bg-white/5"
+                        >
+                          Cache'i temizle
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px] text-zinc-500">
+                        <div>
+                          Açılan içerik:
+                          <span className="text-zinc-300"> {debugMetrics.openedCount}</span>
+                        </div>
+                        <div>
+                          Son içerik boyutu:
+                          <span className="text-zinc-300">
+                            {" "}
+                            {Math.round(debugMetrics.lastBodyBytes / 1024)} KB
+                          </span>
+                        </div>
+                        <div>
+                          Önbellekteki etiket:
+                          <span className="text-zinc-300"> {debugMetrics.cachedLabels}</span>
+                        </div>
+                        <div>
+                          Önbellekteki mail:
+                          <span className="text-zinc-300"> {debugMetrics.cachedMessages}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1105,11 +1317,11 @@ function App() {
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-zinc-200 mb-1">Uygulama Güncellemeleri</h3>
                   <p className="text-xs text-zinc-500 mb-4">FURSOY Mail'in en son özelliklerini ve güvenlik yamalarını almak için uygulamayı güncel tutun.</p>
-                  
+
                   <div className="space-y-4">
                     {!updateProgress ? (
                       <div className="flex items-center gap-3">
-                        <button 
+                        <button
                           onClick={() => checkForUpdates(true)}
                           disabled={isCheckingUpdate}
                           className="px-4 py-2 bg-[#09090b] hover:bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -1118,7 +1330,7 @@ function App() {
                           {isCheckingUpdate ? "Kontrol ediliyor..." : "Güncellemeleri Kontrol Et"}
                         </button>
                         {updateAvailable && (
-                          <button 
+                          <button
                             onClick={installUpdate}
                             className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm text-white font-semibold transition-colors shadow-lg shadow-blue-500/20"
                           >
@@ -1131,16 +1343,16 @@ function App() {
                         <div className="flex items-center justify-between text-xs text-zinc-300 mb-2">
                           <span className="font-medium text-blue-400">Güncelleme İndiriliyor...</span>
                           <span>
-                            {updateProgress.total > 0 
-                              ? Math.round((updateProgress.downloaded / updateProgress.total) * 100) 
+                            {updateProgress.total > 0
+                              ? Math.round((updateProgress.downloaded / updateProgress.total) * 100)
                               : 0}%
                           </span>
                         </div>
                         <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-blue-500 transition-all duration-300"
-                            style={{ 
-                              width: `${updateProgress.total > 0 ? (updateProgress.downloaded / updateProgress.total) * 100 : 0}%` 
+                            style={{
+                              width: `${updateProgress.total > 0 ? (updateProgress.downloaded / updateProgress.total) * 100 : 0}%`
                             }}
                           />
                         </div>
@@ -1161,240 +1373,158 @@ function App() {
           <>
             {/* MAIL LIST */}
             <section className={`flex flex-col border-r border-white/5 bg-[#09090b] ${selectedMail ? 'hidden md:flex md:w-80 lg:w-96' : 'flex-1 md:w-80 lg:w-96 md:flex-none'}`}>
-          <div className="h-12 flex items-center px-4 border-b border-white/5 justify-between shrink-0">
-            <div className="flex items-center gap-2.5">
-              <h2 className="font-semibold text-zinc-100 text-sm capitalize">{activeTab}</h2>
-              {isUserSyncing && (
-                <span className="text-[10px] uppercase tracking-wider text-blue-500 font-semibold animate-pulse">Senkronize…</span>
-              )}
-              {isBackgroundSyncing && !isUserSyncing && (
-                <span className="text-[10px] text-zinc-600 font-medium">Arka planda güncelleniyor</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <ToolbarTip label="Gelen kutusunu sunucudan yenile">
-                <button
-                  type="button"
-                  onClick={handleRefresh}
-                  disabled={isUserSyncing || !accessToken}
-                  className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 transition-all disabled:opacity-20"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isUserSyncing ? "animate-spin text-blue-500" : ""}`} />
-                </button>
-              </ToolbarTip>
-            </div>
-          </div>
-          
-          {/* Search Bar */}
-          <div className="p-2 border-b border-white/5">
-            <div className="relative group">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
-              <input 
-                ref={searchInputRef}
-                type="text" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search emails... (Ctrl+K)" 
-                className="w-full bg-white/[0.03] border border-white/5 rounded-lg pl-8 pr-7 py-1.5 text-xs outline-none focus:border-blue-500/40 focus:bg-white/[0.02] transition-colors text-zinc-200 placeholder:text-zinc-600 select-text"
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300 rounded hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {displayEmails.length === 0 && !isUserSyncing && !isBackgroundSyncing && (
-              <div className="p-8 text-center text-zinc-600 text-xs">
-                {searchQuery ? "No emails match your search." : activeTab === 'inbox' ? "Inbox is empty." : `No ${activeTab} emails.`}
-              </div>
-            )}
-            {displayEmails.map((mail) => (
-              <div 
-                key={mail.id} 
-                onClick={() => handleMailClick(mail)}
-                className={`px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative ${
-                  selectedMail === mail.id 
-                    ? 'bg-blue-500/10 border-l-2 border-l-blue-500' 
-                    : 'hover:bg-white/[0.02] border-l-2 border-l-transparent'
-                }`}
-              >
-                {mail.unread && <div className="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div>}
-                <div className="flex justify-between items-baseline mb-0.5 gap-2">
-                  <span className={`text-xs truncate ${mail.unread ? 'font-semibold text-zinc-100' : 'text-zinc-400'}`}>
-                    {mail.label === 'sent' 
-                      ? `To: ${(mail.recipient || '').split('<')[0].replace(/"/g, '').trim() || mail.recipient}`
-                      : mail.sender.split('<')[0].replace(/"/g, '').trim()
-                    }
-                  </span>
-                  <span className="text-[10px] text-zinc-600 shrink-0">{formatDate(mail.date)}</span>
+              <div className="h-12 flex items-center px-4 border-b border-white/5 justify-between shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="font-semibold text-zinc-100 text-sm capitalize">{activeTab}</h2>
+                  {isUserSyncing && (
+                    <span className="text-[10px] uppercase tracking-wider text-blue-500 font-semibold animate-pulse">Senkronize…</span>
+                  )}
+                  {isBackgroundSyncing && !isUserSyncing && (
+                    <span className="text-[10px] text-zinc-600 font-medium">Arka planda güncelleniyor</span>
+                  )}
                 </div>
-                <h3 className={`text-xs truncate ${mail.unread ? 'text-zinc-200 font-medium' : 'text-zinc-500'}`}>{mail.subject}</h3>
-                <p className="text-[11px] text-zinc-600 mt-0.5 truncate">{mail.snippet}</p>
+                <div className="flex items-center gap-1">
+                  <ToolbarTip label="Gelen kutusunu sunucudan yenile">
+                    <button
+                      type="button"
+                      onClick={handleRefresh}
+                      disabled={isUserSyncing || !accessToken}
+                      className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 transition-all disabled:opacity-20"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isUserSyncing ? "animate-spin text-blue-500" : ""}`} />
+                    </button>
+                  </ToolbarTip>
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
 
-        {/* MAIL DETAIL */}
-        {activeMail ? (
-          <main className="flex-1 flex flex-col bg-[#0a0a0c] relative z-10">
-            {/* Mobile Back Button */}
-            <div className="md:hidden h-12 flex items-center px-4 border-b border-white/5 shrink-0">
-              <button onClick={() => { setSelectedMail(null); setShowReply(false); }} className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200">
-                <CornerUpLeft className="w-3.5 h-3.5" /> Back
-              </button>
-            </div>
-
-            {/* Desktop Toolbar */}
-            <div className="hidden md:flex h-12 items-center justify-between px-5 border-b border-white/5 shrink-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-zinc-500 flex items-center gap-1.5 capitalize">
-                  {activeTab === 'inbox' && <Inbox className="w-3.5 h-3.5" />}
-                  {activeTab === 'sent' && <Send className="w-3.5 h-3.5" />}
-                  {activeTab === 'archive' && <Archive className="w-3.5 h-3.5" />}
-                  {activeTab === 'spam' && <ShieldAlert className="w-3.5 h-3.5" />}
-                  {activeTab === 'trash' && <Trash2 className="w-3.5 h-3.5" />}
-                  {activeTab}
-                </span>
+              {/* Search Bar */}
+              <div className="p-2 border-b border-white/5">
+                <div className="relative group">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search emails... (Ctrl+K)"
+                    className="w-full bg-white/[0.03] border border-white/5 rounded-lg pl-8 pr-7 py-1.5 text-xs outline-none focus:border-blue-500/40 focus:bg-white/[0.02] transition-colors text-zinc-200 placeholder:text-zinc-600 select-text"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300 rounded hover:bg-white/10 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
-                <ToolbarTip label="Yanıtla">
-                  <button
-                    type="button"
-                    onClick={() => { setShowReply(!showReply); setTimeout(() => replyRef.current?.focus(), 100); }}
-                    className={`p-2 rounded-md hover:bg-white/5 transition-colors ${showReply ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
+
+              {/* List */}
+              <div className="flex-1 overflow-y-auto">
+                {displayEmails.length === 0 && !isUserSyncing && !isBackgroundSyncing && (
+                  <div className="p-8 text-center text-zinc-600 text-xs">
+                    {searchQuery ? "No emails match your search." : activeTab === 'inbox' ? "Inbox is empty." : `No ${activeTab} emails.`}
+                  </div>
+                )}
+                {displayEmails.map((mail) => (
+                  <div
+                    key={mail.id}
+                    onClick={() => handleMailClick(mail)}
+                    className={`px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative ${selectedMail === mail.id
+                      ? 'bg-blue-500/10 border-l-2 border-l-blue-500'
+                      : 'hover:bg-white/[0.02] border-l-2 border-l-transparent'
+                      }`}
                   >
-                    <CornerUpLeft className="w-4 h-4" />
-                  </button>
-                </ToolbarTip>
-                {showRestoreBtn && (
-                  <ToolbarTip label={activeTab === "spam" ? "Spam değil (gelen kutusu)" : "Gelen kutusuna taşı"}>
-                    <button
-                      type="button"
-                      onClick={() => handleMoveToInbox(activeMail.id)}
-                      className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-emerald-400 transition-colors"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
-                  </ToolbarTip>
-                )}
-                {showArchiveBtn && (
-                  <ToolbarTip label="Arşivle">
-                    <button
-                      type="button"
-                      onClick={() => handleArchive(activeMail.id)}
-                      className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-amber-400 transition-colors"
-                    >
-                      <Archive className="w-4 h-4" />
-                    </button>
-                  </ToolbarTip>
-                )}
-                {showTrashToBinBtn && (
-                  <ToolbarTip label="Çöpe taşı">
-                    <button
-                      type="button"
-                      onClick={() => handleTrash(activeMail.id)}
-                      className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </ToolbarTip>
-                )}
-                {showDeleteForeverBtn && (
-                  <ToolbarTip label="Kalıcı olarak sil">
-                    <button
-                      type="button"
-                      onClick={() => handlePermanentDelete(activeMail.id)}
-                      className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </ToolbarTip>
-                )}
+                    {mail.unread && <div className="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500"></div>}
+                    <div className="flex justify-between items-baseline mb-0.5 gap-2">
+                      <span className={`text-xs truncate ${mail.unread ? 'font-semibold text-zinc-100' : 'text-zinc-400'}`}>
+                        {mail.label === 'sent'
+                          ? `To: ${(mail.recipient || '').split('<')[0].replace(/"/g, '').trim() || mail.recipient}`
+                          : mail.sender.split('<')[0].replace(/"/g, '').trim()
+                        }
+                      </span>
+                      <span className="text-[10px] text-zinc-600 shrink-0">{formatDate(mail.date)}</span>
+                    </div>
+                    <h3 className={`text-xs truncate ${mail.unread ? 'text-zinc-200 font-medium' : 'text-zinc-500'}`}>{mail.subject}</h3>
+                    <p className="text-[11px] text-zinc-600 mt-0.5 truncate">{mail.snippet}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col" style={{ minHeight: 0 }}>
-              <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col" style={{ minHeight: 0 }}>
-                <h1 className="text-xl font-bold text-zinc-100 mb-5 shrink-0">{activeMail.subject}</h1>
-                
-                {/* Verification Code Banner */}
-                {verificationCode && (
-                  <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-lg bg-blue-500/10 border border-blue-500/20 shrink-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                        <ShieldAlert className="w-4 h-4 text-blue-400" />
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-blue-400/70 font-medium">Doğrulama Kodu</div>
-                        <div className="text-lg font-bold text-blue-300 tracking-[0.3em] font-mono">{verificationCode}</div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(verificationCode);
-                        setVerificationCopyState("copied");
-                        window.setTimeout(() => setVerificationCopyState("idle"), 2000);
-                      }}
-                      className="min-w-[7.5rem] justify-center px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white text-xs font-semibold transition-colors flex items-center gap-2"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      {verificationCopyState === "copied" ? "Kopyalandı" : "Kopyala"}
-                    </button>
-                  </div>
-                )}
+            </section>
 
-                <div className="flex items-center justify-between mb-5 pb-5 border-b border-white/5 shrink-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
-                      {activeMail.sender.charAt(0).toUpperCase() || "U"}
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-zinc-200">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</div>
-                      <div className="text-[11px] text-zinc-600 mt-0.5">
-                        {activeTab === 'sent' ? 'from me' : 'to me'} · {formatDateFull(activeMail.date)}
-                      </div>
-                    </div>
+            {/* MAIL DETAIL */}
+            {activeMail ? (
+              <main className="flex-1 flex flex-col bg-[#0a0a0c] relative z-10">
+                {/* Mobile Back Button */}
+                <div className="md:hidden h-12 flex items-center px-4 border-b border-white/5 shrink-0">
+                  <button onClick={() => { setSelectedMail(null); setShowReply(false); }} className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200">
+                    <CornerUpLeft className="w-3.5 h-3.5" /> Back
+                  </button>
+                </div>
+
+                {/* Desktop Toolbar */}
+                <div className="hidden md:flex h-12 items-center justify-between px-5 border-b border-white/5 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-zinc-500 flex items-center gap-1.5 capitalize">
+                      {activeTab === 'inbox' && <Inbox className="w-3.5 h-3.5" />}
+                      {activeTab === 'sent' && <Send className="w-3.5 h-3.5" />}
+                      {activeTab === 'archive' && <Archive className="w-3.5 h-3.5" />}
+                      {activeTab === 'spam' && <ShieldAlert className="w-3.5 h-3.5" />}
+                      {activeTab === 'trash' && <Trash2 className="w-3.5 h-3.5" />}
+                      {activeTab}
+                    </span>
                   </div>
-                  {/* Mobile action buttons */}
-                  <div className="flex md:hidden items-center gap-1">
+                  <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
                     <ToolbarTip label="Yanıtla">
-                      <button type="button" onClick={() => { setShowReply(!showReply); }} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                      <button
+                        type="button"
+                        onClick={() => { setShowReply(!showReply); setTimeout(() => replyRef.current?.focus(), 100); }}
+                        className={`p-2 rounded-md hover:bg-white/5 transition-colors ${showReply ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
+                      >
                         <CornerUpLeft className="w-4 h-4" />
                       </button>
                     </ToolbarTip>
                     {showRestoreBtn && (
-                      <ToolbarTip label={activeTab === "spam" ? "Spam değil" : "Gelen kutusu"}>
-                        <button type="button" onClick={() => handleMoveToInbox(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                      <ToolbarTip label={activeTab === "spam" ? "Spam değil (gelen kutusu)" : "Gelen kutusuna taşı"}>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveToInbox(activeMail.id)}
+                          className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-emerald-400 transition-colors"
+                        >
                           <RotateCcw className="w-4 h-4" />
                         </button>
                       </ToolbarTip>
                     )}
                     {showArchiveBtn && (
                       <ToolbarTip label="Arşivle">
-                        <button type="button" onClick={() => handleArchive(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                        <button
+                          type="button"
+                          onClick={() => handleArchive(activeMail.id)}
+                          className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-amber-400 transition-colors"
+                        >
                           <Archive className="w-4 h-4" />
                         </button>
                       </ToolbarTip>
                     )}
                     {showTrashToBinBtn && (
                       <ToolbarTip label="Çöpe taşı">
-                        <button type="button" onClick={() => handleTrash(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                        <button
+                          type="button"
+                          onClick={() => handleTrash(activeMail.id)}
+                          className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-400 transition-colors"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </ToolbarTip>
                     )}
                     {showDeleteForeverBtn && (
-                      <ToolbarTip label="Kalıcı sil">
-                        <button type="button" onClick={() => handlePermanentDelete(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                      <ToolbarTip label="Kalıcı olarak sil">
+                        <button
+                          type="button"
+                          onClick={() => handlePermanentDelete(activeMail.id)}
+                          className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-500 transition-colors"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </ToolbarTip>
@@ -1402,9 +1532,100 @@ function App() {
                   </div>
                 </div>
 
-                <div className="flex-1 flex flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
-                  <iframe
-                    srcDoc={`
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col" style={{ minHeight: 0 }}>
+                  <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col" style={{ minHeight: 0 }}>
+                    <h1 className="text-xl font-bold text-zinc-100 mb-5 shrink-0">{activeMail.subject}</h1>
+
+                    {/* Verification Code Banner */}
+                    {verificationCode && (
+                      <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-lg bg-blue-500/10 border border-blue-500/20 shrink-0">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <ShieldAlert className="w-4 h-4 text-blue-400" />
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-blue-400/70 font-medium">Doğrulama Kodu</div>
+                            <div className="text-lg font-bold text-blue-300 tracking-[0.3em] font-mono">{verificationCode}</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(verificationCode);
+                            setVerificationCopyState("copied");
+                            window.setTimeout(() => setVerificationCopyState("idle"), 2000);
+                          }}
+                          className="min-w-[7.5rem] justify-center px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white text-xs font-semibold transition-colors flex items-center gap-2"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          {verificationCopyState === "copied" ? "Kopyalandı" : "Kopyala"}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between mb-5 pb-5 border-b border-white/5 shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                          {activeMail.sender.charAt(0).toUpperCase() || "U"}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-zinc-200">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</div>
+                          <div className="text-[11px] text-zinc-600 mt-0.5">
+                            {activeTab === 'sent' ? 'from me' : 'to me'} · {formatDateFull(activeMail.date)}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Mobile action buttons */}
+                      <div className="flex md:hidden items-center gap-1">
+                        <ToolbarTip label="Yanıtla">
+                          <button type="button" onClick={() => { setShowReply(!showReply); }} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                            <CornerUpLeft className="w-4 h-4" />
+                          </button>
+                        </ToolbarTip>
+                        {showRestoreBtn && (
+                          <ToolbarTip label={activeTab === "spam" ? "Spam değil" : "Gelen kutusu"}>
+                            <button type="button" onClick={() => handleMoveToInbox(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          </ToolbarTip>
+                        )}
+                        {showArchiveBtn && (
+                          <ToolbarTip label="Arşivle">
+                            <button type="button" onClick={() => handleArchive(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                              <Archive className="w-4 h-4" />
+                            </button>
+                          </ToolbarTip>
+                        )}
+                        {showTrashToBinBtn && (
+                          <ToolbarTip label="Çöpe taşı">
+                            <button type="button" onClick={() => handleTrash(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </ToolbarTip>
+                        )}
+                        {showDeleteForeverBtn && (
+                          <ToolbarTip label="Kalıcı sil">
+                            <button type="button" onClick={() => handlePermanentDelete(activeMail.id)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </ToolbarTip>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
+                      {isBodyLoading ? (
+                        <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
+                          Mail gÃ¶vdesi yÃ¼kleniyor...
+                        </div>
+                      ) : bodyError ? (
+                        <div className="flex-1 flex items-center justify-center text-xs text-red-500 bg-white">
+                          {bodyError}
+                        </div>
+                      ) : hasLoadedActiveBody ? (
+                        <iframe
+                          key={activeMail.id}
+                          srcDoc={`
                       <!DOCTYPE html>
                       <html>
                         <head>
@@ -1466,59 +1687,64 @@ function App() {
                         </body>
                       </html>
                     `}
-                    sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin"
-                    className="w-full border-none flex-1"
-                  />
-                </div>
+                          sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin"
+                          className="w-full border-none flex-1"
+                        />
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
+                          Mail gÃ¶vdesi hazÄ±rlanÄ±yor...
+                        </div>
+                      )}
+                    </div>
 
-                {/* Reply Box */}
-                {showReply && (
-                  <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
-                      <CornerUpLeft className="w-3.5 h-3.5 text-zinc-500" />
-                      <span className="text-xs text-zinc-400">
-                        Reply to <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</span>
-                      </span>
-                    </div>
-                    <textarea
-                      ref={replyRef}
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      placeholder="Write your reply..."
-                      className="w-full bg-transparent p-4 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none resize-none min-h-[120px] select-text"
-                    />
-                    <div className="px-4 py-2.5 border-t border-white/5 flex items-center justify-between">
-                      <button 
-                        onClick={() => { setShowReply(false); setReplyText(""); }}
-                        className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleReply}
-                        disabled={!replyText.trim() || isSending}
-                        className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-2"
-                      >
-                        {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                        {isSending ? "Sending..." : "Send Reply"}
-                      </button>
-                    </div>
+                    {/* Reply Box */}
+                    {showReply && (
+                      <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
+                          <CornerUpLeft className="w-3.5 h-3.5 text-zinc-500" />
+                          <span className="text-xs text-zinc-400">
+                            Reply to <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</span>
+                          </span>
+                        </div>
+                        <textarea
+                          ref={replyRef}
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Write your reply..."
+                          className="w-full bg-transparent p-4 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none resize-none min-h-[120px] select-text"
+                        />
+                        <div className="px-4 py-2.5 border-t border-white/5 flex items-center justify-between">
+                          <button
+                            onClick={() => { setShowReply(false); setReplyText(""); }}
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleReply}
+                            disabled={!replyText.trim() || isSending}
+                            className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-2"
+                          >
+                            {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                            {isSending ? "Sending..." : "Send Reply"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          </main>
-        ) : (
-          <main className="hidden md:flex flex-1 items-center justify-center bg-[#0a0a0c]">
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-3">
-                <Inbox className="w-7 h-7 text-zinc-700" />
-              </div>
-              <h3 className="text-zinc-500 font-medium text-sm">No message selected</h3>
-              <p className="text-xs text-zinc-700 mt-1">Select an email to read it here.</p>
-            </div>
-          </main>
-        )}
+                </div>
+              </main>
+            ) : (
+              <main className="hidden md:flex flex-1 items-center justify-center bg-[#0a0a0c]">
+                <div className="text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-3">
+                    <Inbox className="w-7 h-7 text-zinc-700" />
+                  </div>
+                  <h3 className="text-zinc-500 font-medium text-sm">No message selected</h3>
+                  <p className="text-xs text-zinc-700 mt-1">Select an email to read it here.</p>
+                </div>
+              </main>
+            )}
           </>
         )}
       </div>
@@ -1530,7 +1756,7 @@ function App() {
             <AlertTriangle className="w-3.5 h-3.5" />
             Oturum süresi doldu. Tekrar giriş yapın.
           </div>
-          <button 
+          <button
             onClick={loginWithGoogle}
             className="px-3 py-1 bg-white text-red-600 text-xs font-semibold rounded hover:bg-red-50 transition-colors"
           >
@@ -1542,13 +1768,12 @@ function App() {
       {/* Toast notifications */}
       <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none max-w-sm">
         {toasts.map(toast => (
-          <div 
+          <div
             key={toast.id}
-            className={`pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium backdrop-blur-md animate-[slideIn_0.3s_ease] ${
-              toast.type === 'error' ? 'bg-red-500/90 text-white' :
+            className={`pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium backdrop-blur-md animate-[slideIn_0.3s_ease] ${toast.type === 'error' ? 'bg-red-500/90 text-white' :
               toast.type === 'success' ? 'bg-emerald-500/90 text-white' :
-              'bg-zinc-800/90 text-zinc-200 border border-white/10'
-            }`}
+                'bg-zinc-800/90 text-zinc-200 border border-white/10'
+              }`}
           >
             {toast.type === 'error' && <XCircle className="w-3.5 h-3.5 shrink-0" />}
             {toast.type === 'success' && <CheckCircle className="w-3.5 h-3.5 shrink-0" />}

@@ -17,6 +17,18 @@ pub struct Email {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmailSummary {
+    pub id: String,
+    pub sender: String,
+    pub recipient: String,
+    pub subject: String,
+    pub snippet: String,
+    pub date: i64,
+    pub unread: bool,
+    pub label: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuthInfo {
     pub access_token: String,
     pub refresh_token: String,
@@ -138,26 +150,25 @@ pub fn upsert_emails(app: &AppHandle, emails: Vec<Email>) -> Result<()> {
 }
 
 #[tauri::command]
-pub fn get_emails_by_label(app: tauri::AppHandle, label: String) -> Result<Vec<Email>, String> {
+pub fn get_emails_by_label(app: tauri::AppHandle, label: String) -> Result<Vec<EmailSummary>, String> {
     let db_path = get_db_path(&app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, sender, recipient, subject, snippet, body_html, date, unread, label FROM emails WHERE label = ?1 ORDER BY date DESC")
+        .prepare("SELECT id, sender, recipient, subject, snippet, date, unread, label FROM emails WHERE label = ?1 ORDER BY date DESC")
         .map_err(|e| e.to_string())?;
 
     let email_iter = stmt
         .query_map(params![label], |row| {
-            Ok(Email {
+            Ok(EmailSummary {
                 id: row.get(0)?,
                 sender: row.get(1)?,
                 recipient: row.get(2)?,
                 subject: row.get(3)?,
                 snippet: row.get(4)?,
-                body_html: row.get(5)?,
-                date: row.get(6)?,
-                unread: row.get(7)?,
-                label: row.get(8)?,
+                date: row.get(5)?,
+                unread: row.get(6)?,
+                label: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -173,26 +184,25 @@ pub fn get_emails_by_label(app: tauri::AppHandle, label: String) -> Result<Vec<E
 }
 
 #[tauri::command]
-pub fn get_local_emails(app: tauri::AppHandle) -> Result<Vec<Email>, String> {
+pub fn get_local_emails(app: tauri::AppHandle) -> Result<Vec<EmailSummary>, String> {
     let db_path = get_db_path(&app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, sender, recipient, subject, snippet, body_html, date, unread, label FROM emails ORDER BY date DESC")
+        .prepare("SELECT id, sender, recipient, subject, snippet, date, unread, label FROM emails ORDER BY date DESC")
         .map_err(|e| e.to_string())?;
 
     let email_iter = stmt
         .query_map([], |row| {
-            Ok(Email {
+            Ok(EmailSummary {
                 id: row.get(0)?,
                 sender: row.get(1)?,
                 recipient: row.get(2)?,
                 subject: row.get(3)?,
                 snippet: row.get(4)?,
-                body_html: row.get(5)?,
-                date: row.get(6)?,
-                unread: row.get(7)?,
-                label: row.get(8)?,
+                date: row.get(5)?,
+                unread: row.get(6)?,
+                label: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -205,6 +215,19 @@ pub fn get_local_emails(app: tauri::AppHandle) -> Result<Vec<Email>, String> {
     }
 
     Ok(emails)
+}
+
+#[tauri::command]
+pub fn get_email_body(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    let db_path = get_db_path(&app);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    conn.query_row(
+        "SELECT body_html FROM emails WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
 }
 
 pub fn mark_email_as_read_local(app: &AppHandle, id: &str) -> Result<(), String> {

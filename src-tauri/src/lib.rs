@@ -79,6 +79,7 @@ pub fn run() {
             auth::refresh_access_token,
             db::get_local_emails,
             db::get_emails_by_label,
+            db::get_email_body,
             db::get_inbox_unread_count,
             db::get_auth_info,
             db::logout,
