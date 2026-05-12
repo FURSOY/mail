@@ -7,6 +7,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu } from "lucide-react";
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { tr } from "./i18n";
+import { typography, ui } from "./theme";
 import "./index.css";
 
 function decodeBasicHtmlEntities(html: string): string {
@@ -240,6 +242,88 @@ interface MailDebugMetrics {
   cachedMessages: number;
 }
 
+function EmailHtmlView({ html, onOpenUrl }: { html: string; onOpenUrl: (url: string) => void }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const root = host.shadowRoot || host.attachShadow({ mode: "open" });
+    root.innerHTML = `
+      <style>
+        * { box-sizing: border-box; }
+        :host { display: block; height: 100%; background: #fff; color: #1a1a1a; }
+        .email-content { min-height: 100%; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+        img { max-width: 100% !important; height: auto !important; }
+        table { max-width: 100% !important; }
+        td, th { max-width: 100%; }
+        pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .plain-text { white-space: pre-wrap; }
+        a { color: #2563eb; cursor: pointer; }
+        button, [role="button"], input[type="button"], input[type="submit"] { cursor: pointer; }
+      </style>
+      <div class="email-content">${html}</div>
+    `;
+
+    const resolveUrl = (url: string | null | undefined) => {
+      if (!url || url.startsWith("#")) return null;
+      try {
+        const resolved = new URL(url, "https://mail.google.com/").href;
+        return /^(https?:|mailto:|tel:)/i.test(resolved) ? resolved : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const elementFromTarget = (eventTarget: EventTarget | null) => {
+      return eventTarget instanceof Element ? eventTarget : null;
+    };
+
+    const findUrl = (eventTarget: EventTarget | null) => {
+      const node = elementFromTarget(eventTarget);
+      const link = node?.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
+      if (link) return resolveUrl(link.getAttribute("href") || link.href);
+
+      const button = node?.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
+      const form = button?.closest("form") as HTMLFormElement | null;
+      return resolveUrl(
+        button?.getAttribute("formaction") ||
+        button?.getAttribute("data-href") ||
+        button?.getAttribute("data-url") ||
+        form?.getAttribute("action")
+      );
+    };
+
+    const handleClick = (event: Event) => {
+      const url = findUrl(event.target);
+      if (!url) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenUrl(url);
+    };
+
+    const handleSubmit = (event: Event) => {
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      const url = resolveUrl(form?.getAttribute("action"));
+      if (!url) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenUrl(url);
+    };
+
+    root.addEventListener("click", handleClick, true);
+    root.addEventListener("submit", handleSubmit, true);
+
+    return () => {
+      root.removeEventListener("click", handleClick, true);
+      root.removeEventListener("submit", handleSubmit, true);
+    };
+  }, [html, onOpenUrl]);
+
+  return <div ref={hostRef} className="h-full w-full overflow-auto bg-white" />;
+}
+
 interface AuthInfo {
   access_token: string;
   email: string;
@@ -328,7 +412,6 @@ function App() {
   const recentlyReadRef = useRef<Set<string>>(new Set());
   const isFirstSyncRef = useRef(true);
   const tabEmailCacheRef = useRef<Partial<Record<string, EmailSummary[]>>>({});
-  const mailFrameRef = useRef<HTMLIFrameElement>(null);
   const [, startTabTransition] = useTransition();
   const [, startDataTransition] = useTransition();
   const activeTabRef = useRef(activeTab); // Track current tab for interval callbacks
@@ -363,53 +446,24 @@ function App() {
 
   const openExternalMailUrl = useCallback((url: string) => {
     if (!url || url.startsWith("#")) return;
-    openUrl(url).catch((err) => {
+    let normalized: string;
+    try {
+      normalized = new URL(url, "https://mail.google.com/").href;
+    } catch {
+      showToast(tr.actions.openLinkFailed, "error");
+      return;
+    }
+
+    if (!/^(https?:|mailto:|tel:)/i.test(normalized)) {
+      showToast(tr.actions.openLinkFailed, "error");
+      return;
+    }
+
+    openUrl(normalized).catch((err) => {
       console.error("Failed to open mail link:", err);
-      showToast("Link tarayicida acilamadi.", "error");
+      showToast(tr.actions.openLinkFailed, "error");
     });
   }, [showToast]);
-
-  const handleMailFrameLoad = useCallback(() => {
-    const frame = mailFrameRef.current;
-    const doc = frame?.contentDocument;
-    if (!doc) return;
-
-    const resolveUrl = (url: string | null | undefined) => {
-      if (!url || url.startsWith("#")) return null;
-      try {
-        return new URL(url, doc.baseURI || "https://mail.google.com/").href;
-      } catch {
-        return null;
-      }
-    };
-
-    const findClickedUrl = (eventTarget: EventTarget | null) => {
-      const node = eventTarget instanceof Element ? eventTarget : null;
-      const link = node?.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
-      if (link) return resolveUrl(link.getAttribute("href") || link.href);
-
-      const button = node?.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
-      const form = button?.closest("form") as HTMLFormElement | null;
-      return resolveUrl(button?.getAttribute("formaction") || button?.getAttribute("data-href") || form?.getAttribute("action"));
-    };
-
-    doc.addEventListener("click", (event) => {
-      const url = findClickedUrl(event.target);
-      if (!url) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openExternalMailUrl(url);
-    }, true);
-
-    doc.addEventListener("submit", (event) => {
-      const form = event.target instanceof HTMLFormElement ? event.target : null;
-      const url = resolveUrl(form?.getAttribute("action"));
-      if (!url) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openExternalMailUrl(url);
-    }, true);
-  }, [openExternalMailUrl]);
 
   const checkForUpdates = async (showUIMessages = false) => {
     try {
@@ -420,11 +474,11 @@ function App() {
 
       if (update) {
         setUpdateAvailable({ version: update.version, date: update.date || '', body: update.body || '' });
-        setUpdateStatus(`Yeni guncelleme mevcut: v${update.version}`);
+        setUpdateStatus(tr.update.available.replace("{version}", update.version));
         showToast(`Yeni bir güncelleme mevcut: v${update.version}`, "info");
       } else {
         setUpdateAvailable(null);
-        setUpdateStatus("Mevcut surum guncel.");
+        setUpdateStatus(tr.update.upToDate);
         if (showUIMessages) showToast("Mevcut sürüm güncel.", "success");
       }
     } catch (e) {
@@ -432,12 +486,12 @@ function App() {
       if (isNoUpdateError(e)) {
         setUpdateAvailable(null);
         setUpdateError(null);
-        setUpdateStatus("Mevcut surum guncel.");
+        setUpdateStatus(tr.update.upToDate);
         if (showUIMessages) showToast("Mevcut sürüm güncel.", "success");
         return;
       }
       const message = e instanceof Error ? e.message : String(e);
-      setUpdateError(`Guncelleme kontrolu basarisiz: ${message}`);
+      setUpdateError(`${tr.update.checkFailed}: ${message}`);
       setUpdateStatus("");
       if (showUIMessages) showToast("Güncelleme kontrolü başarısız.", "error");
     } finally {
@@ -452,7 +506,7 @@ function App() {
       const update = await check();
       if (!update) {
         setUpdateAvailable(null);
-        setUpdateStatus("Mevcut surum guncel.");
+        setUpdateStatus(tr.update.upToDate);
         return;
       }
       setUpdateProgress({ downloaded: 0, total: 100 });
@@ -479,12 +533,12 @@ function App() {
       if (isNoUpdateError(e)) {
         setUpdateAvailable(null);
         setUpdateError(null);
-        setUpdateStatus("Mevcut surum guncel.");
+        setUpdateStatus(tr.update.upToDate);
         setUpdateProgress(null);
         return;
       }
       const message = e instanceof Error ? e.message : String(e);
-      setUpdateError(`Guncelleme yuklenirken hata: ${message}`);
+      setUpdateError(`${tr.update.installFailed}: ${message}`);
       setUpdateProgress(null);
     }
   };
@@ -564,7 +618,7 @@ function App() {
       cachedMessages: 0,
     });
     void loadEmails(activeTabRef.current);
-    showToast("GeÃ§ici cache temizlendi.", "success");
+    showToast(tr.actions.clearCacheSuccess, "success");
   };
 
   // Auto-refresh token and retry on 401
@@ -787,20 +841,20 @@ function App() {
 
   async function loginWithGoogle() {
     try {
-      setAuthStatus("Waiting for browser...");
+      setAuthStatus(tr.auth.waitingForBrowser);
       const res = await invoke<AuthInfo>("start_google_oauth");
       setUserInfo(res);
       setAccessToken(res.access_token);
       accessTokenRef.current = res.access_token;
-      setAuthStatus("Logged in! Syncing...");
+      setAuthStatus(tr.auth.loggedInSyncing);
       setTokenExpired(false);
 
       const ok = await backgroundSyncRef.current(res.access_token, { userInitiated: true });
       if (ok) {
-        setAuthStatus("Sync complete!");
+        setAuthStatus(tr.auth.syncComplete);
         showToast("Giriş başarılı!", "success");
       } else {
-        setAuthStatus("Sync failed after login. Will retry automatically.");
+        setAuthStatus(tr.auth.syncFailedAfterLogin);
       }
       startPeriodicSync();
     } catch (e) {
@@ -821,7 +875,7 @@ function App() {
       setSelectedMail(null);
       setSelectedMailBody("");
       setSelectedMailBodyId(null);
-      setAuthStatus("Logged out.");
+      setAuthStatus(tr.auth.loggedOut);
     } catch (e) {
       console.error("Logout failed:", e);
     }
@@ -990,7 +1044,7 @@ function App() {
       .catch((e) => {
         if (cancelled) return;
         console.error("Failed to load email body:", e);
-        setBodyError("Mail gÃ¶vdesi yÃ¼klenemedi.");
+        setBodyError(tr.mail.bodyLoadFailed);
       })
       .finally(() => {
         if (!cancelled) setIsBodyLoading(false);
@@ -1054,7 +1108,7 @@ function App() {
             <Menu className="h-4 w-4" />
           </button>
           <img src="/logo.svg" className="w-4 h-4 object-contain" alt="MailApp Logo" />
-          <span className="text-zinc-400">FURSOY Mail</span>
+          <span className="text-zinc-400">{tr.app.name}</span>
         </div>
         <div className="flex items-center" style={{ WebkitAppRegion: 'no-drag' } as any}>
           <button
@@ -1100,7 +1154,7 @@ function App() {
               onClick={() => goToTab("inbox")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'inbox' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
-              <Inbox className="w-4 h-4" /> Inbox
+              <Inbox className="w-4 h-4" /> {tr.nav.inbox}
               {unreadCount > 0 && (
                 <span className="ml-auto text-[10px] bg-blue-500 text-white min-w-[18px] text-center py-0.5 px-1 rounded-full font-bold">{unreadCount}</span>
               )}
@@ -1109,13 +1163,13 @@ function App() {
               onClick={() => goToTab("sent")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'sent' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
-              <Send className="w-4 h-4" /> Sent
+              <Send className="w-4 h-4" /> {tr.nav.sent}
             </button>
             <button
               onClick={() => goToTab("archive")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'archive' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
-              <Archive className="w-4 h-4" /> Archive
+              <Archive className="w-4 h-4" /> {tr.nav.archive}
             </button>
 
             <div className="my-2 border-t border-white/5" />
@@ -1124,13 +1178,13 @@ function App() {
               onClick={() => goToTab("spam")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'spam' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
-              <ShieldAlert className="w-4 h-4" /> Spam
+              <ShieldAlert className="w-4 h-4" /> {tr.nav.spam}
             </button>
             <button
               onClick={() => goToTab("trash")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'trash' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
-              <Trash2 className="w-4 h-4" /> Trash
+              <Trash2 className="w-4 h-4" /> {tr.nav.trash}
             </button>
 
             <div className="my-2 border-t border-white/5" />
@@ -1139,7 +1193,7 @@ function App() {
               onClick={() => goToTab("settings")}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
-              <Settings className="w-4 h-4" /> Ayarlar
+              <Settings className="w-4 h-4" /> {tr.nav.settings}
             </button>
           </nav>
 
@@ -1166,7 +1220,7 @@ function App() {
               <>
                 <div className="px-2 py-1 text-[10px] text-zinc-600">{authStatus}</div>
                 <button onClick={loginWithGoogle} disabled={isUserSyncing} className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-zinc-400 hover:bg-white/5 hover:text-zinc-200 transition-colors disabled:opacity-50">
-                  <Settings className="w-4 h-4" /> Login with Google
+                  <Settings className="w-4 h-4" /> {tr.auth.loginWithGoogle}
                   {isUserSyncing && <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500 ml-auto" />}
                 </button>
               </>
@@ -1194,19 +1248,19 @@ function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="w-full max-w-lg bg-[#111113] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                <h3 className="text-sm font-semibold text-zinc-200">New Email</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">{tr.compose.title}</h3>
                 <button onClick={() => setShowCompose(false)} className="p-1 rounded hover:bg-white/10 text-zinc-400"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-4 space-y-3 flex-1">
-                <input value={composeTo} onChange={e => setComposeTo(e.target.value)} placeholder="To" className="w-full bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-blue-500/40 select-text" />
-                <input value={composeSubject} onChange={e => setComposeSubject(e.target.value)} placeholder="Subject" className="w-full bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-blue-500/40 select-text" />
-                <textarea value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder="Write your message..." className="w-full bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-blue-500/40 resize-none min-h-[200px] select-text" />
+                <input value={composeTo} onChange={e => setComposeTo(e.target.value)} placeholder={tr.compose.to} className={ui.input} />
+                <input value={composeSubject} onChange={e => setComposeSubject(e.target.value)} placeholder={tr.compose.subject} className={ui.input} />
+                <textarea value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder={tr.compose.body} className={`${ui.input} resize-none min-h-[200px]`} />
               </div>
               <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-                <button onClick={() => setShowCompose(false)} className="text-xs text-zinc-500 hover:text-zinc-300">Discard</button>
+                <button onClick={() => setShowCompose(false)} className="text-xs text-zinc-500 hover:text-zinc-300">{tr.compose.discard}</button>
                 <button onClick={handleComposeSend} disabled={!composeTo.trim() || !composeSubject.trim() || isSending} className="px-5 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2">
                   {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                  {isSending ? "Sending..." : "Send"}
+                  {isSending ? tr.compose.sending : tr.compose.send}
                 </button>
               </div>
             </div>
@@ -1217,9 +1271,9 @@ function App() {
         {activeTab === 'settings' ? (
           <section className="flex-1 overflow-y-auto bg-[#0a0a0c] p-8">
             <div className="max-w-2xl mx-auto">
-              <h2 className="text-2xl font-bold text-zinc-100 mb-6 flex items-center gap-2">
+              <h2 className={`${typography.pageTitle} mb-6 flex items-center gap-2`}>
                 <Settings className="w-6 h-6" />
-                Ayarlar
+                {tr.nav.settings}
               </h2>
 
               <div className="space-y-8">
@@ -1343,7 +1397,7 @@ function App() {
                             }}
                             className={`px-3 py-1.5 text-xs rounded-md transition-colors ${otpMode === mode ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
                           >
-                            {mode === "off" ? "KapalÄ±" : mode === "balanced" ? "Dengeli" : "SÄ±kÄ±"}
+                            {mode === "off" ? "Kapalı" : mode === "balanced" ? "Dengeli" : "Sıkı"}
                           </button>
                         ))}
                       </div>
@@ -1404,10 +1458,10 @@ function App() {
 
                 {/* Updates */}
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
-                  <h3 className="text-sm font-semibold text-zinc-200 mb-1">Uygulama Güncellemeleri</h3>
-                  <p className="text-xs text-zinc-500 mb-4">FURSOY Mail'in en son özelliklerini ve güvenlik yamalarını almak için uygulamayı güncel tutun.</p>
+                  <h3 className={`${typography.sectionTitle} mb-1`}>{tr.update.title}</h3>
+                  <p className={`${typography.bodyMuted} mb-4`}>{tr.update.description}</p>
                   <div className="mb-4 flex items-center justify-between rounded-lg border border-white/5 bg-[#09090b] px-3 py-2">
-                    <span className="text-xs text-zinc-500">Guncel surum</span>
+                    <span className="text-xs text-zinc-500">{tr.update.currentVersion}</span>
                     <span className="text-xs font-semibold text-zinc-200">v{currentVersion || "..."}</span>
                   </div>
 
@@ -1417,24 +1471,24 @@ function App() {
                         <button
                           onClick={() => checkForUpdates(true)}
                           disabled={isCheckingUpdate}
-                          className="px-4 py-2 bg-[#09090b] hover:bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-200 font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                          className={`${ui.buttonSecondary} flex items-center gap-2`}
                         >
                           {isCheckingUpdate ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
-                          {isCheckingUpdate ? "Kontrol ediliyor..." : "Güncellemeleri Kontrol Et"}
+                          {isCheckingUpdate ? tr.update.checking : tr.update.check}
                         </button>
                         {updateAvailable && (
                           <button
                             onClick={installUpdate}
-                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm text-white font-semibold transition-colors shadow-lg shadow-blue-500/20"
+                            className={ui.buttonPrimary}
                           >
-                            v{updateAvailable.version} Sürümüne Güncelle
+                            {tr.update.installVersion.replace("{version}", updateAvailable.version)}
                           </button>
                         )}
                       </div>
                     ) : (
                       <div className="bg-[#09090b] border border-white/10 rounded-lg p-4">
                         <div className="flex items-center justify-between text-xs text-zinc-300 mb-2">
-                          <span className="font-medium text-blue-400">Güncelleme İndiriliyor...</span>
+                          <span className="font-medium text-blue-400">{tr.update.downloading}</span>
                           <span>
                             {updateProgress.total > 0
                               ? Math.round((updateProgress.downloaded / updateProgress.total) * 100)
@@ -1450,7 +1504,7 @@ function App() {
                           />
                         </div>
                         <p className="text-[10px] text-zinc-500 mt-2">
-                          İndirme tamamlandığında uygulama otomatik olarak yeniden başlatılacaktır. Lütfen bekleyin.
+                          {tr.update.restartHint}
                         </p>
                       </div>
                     )}
@@ -1520,7 +1574,7 @@ function App() {
               <div className="flex-1 overflow-y-auto">
                 {displayEmails.length === 0 && !isUserSyncing && !isBackgroundSyncing && (
                   <div className="p-8 text-center text-zinc-600 text-xs">
-                    {searchQuery ? "No emails match your search." : activeTab === 'inbox' ? "Inbox is empty." : `No ${activeTab} emails.`}
+                    {searchQuery ? tr.mail.searchEmpty : activeTab === 'inbox' ? tr.mail.emptyInbox : tr.mail.emptyFolder}
                   </div>
                 )}
                 {displayEmails.map((mail) => (
@@ -1712,51 +1766,17 @@ function App() {
                     <div className="flex-1 flex flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
                       {isBodyLoading ? (
                         <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
-                          Mail gÃ¶vdesi yÃ¼kleniyor...
+                          {tr.mail.loadingBody}
                         </div>
                       ) : bodyError ? (
                         <div className="flex-1 flex items-center justify-center text-xs text-red-500 bg-white">
                           {bodyError}
                         </div>
                       ) : hasLoadedActiveBody ? (
-                        <iframe
-                          ref={mailFrameRef}
-                          key={activeMail.id}
-                          onLoad={handleMailFrameLoad}
-                          srcDoc={`
-                      <!DOCTYPE html>
-                      <html>
-                        <head>
-                          <base target="_blank" href="https://mail.google.com/">
-                          <style>
-                            * { box-sizing: border-box; }
-                            html, body { min-height: 100%; margin: 0; }
-                            html { background: #fff; }
-                            body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1a1a1a; overflow: auto; overflow-wrap: anywhere; }
-                            img { max-width: 100% !important; height: auto !important; }
-                            table { max-width: 100% !important; }
-                            td, th { max-width: 100%; }
-                            pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
-                            .plain-text { white-space: pre-wrap; }
-                            a { color: #2563eb; }
-                            /* Custom scrollbar matching app theme */
-                            ::-webkit-scrollbar { width: 5px; }
-                            ::-webkit-scrollbar-track { background: transparent; }
-                            ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 10px; }
-                            ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
-                          </style>
-                        </head>
-                        <body>
-                          ${activeMailHtml}
-                        </body>
-                      </html>
-                    `}
-                          sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin"
-                          className="w-full border-none flex-1"
-                        />
+                        <EmailHtmlView key={activeMail.id} html={activeMailHtml} onOpenUrl={openExternalMailUrl} />
                       ) : (
                         <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
-                          Mail gÃ¶vdesi hazÄ±rlanÄ±yor...
+                          {tr.mail.preparingBody}
                         </div>
                       )}
                     </div>
@@ -1767,14 +1787,14 @@ function App() {
                         <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
                           <CornerUpLeft className="w-3.5 h-3.5 text-zinc-500" />
                           <span className="text-xs text-zinc-400">
-                            Reply to <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</span>
+                            {tr.mail.replyTo} <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</span>
                           </span>
                         </div>
                         <textarea
                           ref={replyRef}
                           value={replyText}
                           onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="Write your reply..."
+                          placeholder={tr.mail.writeReply}
                           className="w-full bg-transparent p-4 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none resize-none min-h-[120px] select-text"
                         />
                         <div className="px-4 py-2.5 border-t border-white/5 flex items-center justify-between">
@@ -1782,7 +1802,7 @@ function App() {
                             onClick={() => { setShowReply(false); setReplyText(""); }}
                             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
                           >
-                            Cancel
+                            {tr.mail.cancel}
                           </button>
                           <button
                             onClick={handleReply}
@@ -1790,7 +1810,7 @@ function App() {
                             className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-2"
                           >
                             {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                            {isSending ? "Sending..." : "Send Reply"}
+                            {isSending ? tr.compose.sending : tr.mail.sendReply}
                           </button>
                         </div>
                       </div>
@@ -1804,8 +1824,8 @@ function App() {
                   <div className="w-14 h-14 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-3">
                     <Inbox className="w-7 h-7 text-zinc-700" />
                   </div>
-                  <h3 className="text-zinc-500 font-medium text-sm">No message selected</h3>
-                  <p className="text-xs text-zinc-700 mt-1">Select an email to read it here.</p>
+                  <h3 className="text-zinc-500 font-medium text-sm">{tr.mail.noSelection}</h3>
+                  <p className="text-xs text-zinc-700 mt-1">{tr.mail.noSelectionHint}</p>
                 </div>
               </main>
             )}

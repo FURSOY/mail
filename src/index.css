@@ -6,6 +6,17 @@
 
 @layer base {
   :root {
+    --app-accent: #3b82f6;
+    --app-accent-hover: #2563eb;
+    --app-accent-soft: rgb(59 130 246 / 0.14);
+    --app-surface: #09090b;
+    --app-surface-raised: #111113;
+    --app-border-subtle: rgb(255 255 255 / 0.05);
+    --app-border-strong: rgb(255 255 255 / 0.1);
+    --app-radius-control: 8px;
+    --app-font-size-body: 14px;
+    --app-font-size-compact: 12px;
+    --app-font-weight-strong: 600;
     --font-heading: 'Outfit', var(--font-sans);
     --font-sans: 'Outfit', sans-serif;
     --background: oklch(1 0 0);
