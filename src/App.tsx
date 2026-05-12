@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useTransition, type ReactNode
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu } from "lucide-react";
 import { check } from '@tauri-apps/plugin-updater';
@@ -75,6 +76,11 @@ function sanitizeEmailHtml(html: string, fallback: string): string {
 
 const LARGE_BODY_RENDER_LIMIT = 750_000;
 const MAX_LABEL_CACHE = 5;
+
+function isNoUpdateError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return /no update|not available|up to date|guncel|güncel|204/.test(message);
+}
 
 function byteLength(text: string): number {
   return new Blob([text]).size;
@@ -302,10 +308,12 @@ function App() {
   const [tokenExpired, setTokenExpired] = useState(false);
 
   // Updater States
+  const [currentVersion, setCurrentVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<{ version: string, date: string, body: string } | null>(null);
   const [updateProgress, setUpdateProgress] = useState<{ downloaded: number, total: number } | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<string>("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
@@ -320,6 +328,7 @@ function App() {
   const recentlyReadRef = useRef<Set<string>>(new Set());
   const isFirstSyncRef = useRef(true);
   const tabEmailCacheRef = useRef<Partial<Record<string, EmailSummary[]>>>({});
+  const mailFrameRef = useRef<HTMLIFrameElement>(null);
   const [, startTabTransition] = useTransition();
   const [, startDataTransition] = useTransition();
   const activeTabRef = useRef(activeTab); // Track current tab for interval callbacks
@@ -337,6 +346,14 @@ function App() {
     accessTokenRef.current = accessToken;
   }, [accessToken]);
 
+  useEffect(() => {
+    getVersion()
+      .then(setCurrentVersion)
+      .catch((err) => {
+        console.error("Failed to read app version:", err);
+      });
+  }, []);
+
   // Toast helper
   const showToast = useCallback((msg: string, type: 'error' | 'success' | 'info' = 'info') => {
     const id = Date.now();
@@ -344,22 +361,84 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
 
+  const openExternalMailUrl = useCallback((url: string) => {
+    if (!url || url.startsWith("#")) return;
+    openUrl(url).catch((err) => {
+      console.error("Failed to open mail link:", err);
+      showToast("Link tarayicida acilamadi.", "error");
+    });
+  }, [showToast]);
+
+  const handleMailFrameLoad = useCallback(() => {
+    const frame = mailFrameRef.current;
+    const doc = frame?.contentDocument;
+    if (!doc) return;
+
+    const resolveUrl = (url: string | null | undefined) => {
+      if (!url || url.startsWith("#")) return null;
+      try {
+        return new URL(url, doc.baseURI || "https://mail.google.com/").href;
+      } catch {
+        return null;
+      }
+    };
+
+    const findClickedUrl = (eventTarget: EventTarget | null) => {
+      const node = eventTarget instanceof Element ? eventTarget : null;
+      const link = node?.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
+      if (link) return resolveUrl(link.getAttribute("href") || link.href);
+
+      const button = node?.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
+      const form = button?.closest("form") as HTMLFormElement | null;
+      return resolveUrl(button?.getAttribute("formaction") || button?.getAttribute("data-href") || form?.getAttribute("action"));
+    };
+
+    doc.addEventListener("click", (event) => {
+      const url = findClickedUrl(event.target);
+      if (!url) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openExternalMailUrl(url);
+    }, true);
+
+    doc.addEventListener("submit", (event) => {
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      const url = resolveUrl(form?.getAttribute("action"));
+      if (!url) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openExternalMailUrl(url);
+    }, true);
+  }, [openExternalMailUrl]);
+
   const checkForUpdates = async (showUIMessages = false) => {
     try {
       if (showUIMessages) setIsCheckingUpdate(true);
       setUpdateError(null);
+      setUpdateStatus("");
       const update = await check();
 
       if (update) {
         setUpdateAvailable({ version: update.version, date: update.date || '', body: update.body || '' });
+        setUpdateStatus(`Yeni guncelleme mevcut: v${update.version}`);
         showToast(`Yeni bir güncelleme mevcut: v${update.version}`, "info");
       } else {
         setUpdateAvailable(null);
+        setUpdateStatus("Mevcut surum guncel.");
         if (showUIMessages) showToast("Mevcut sürüm güncel.", "success");
       }
     } catch (e) {
       console.error("Update check failed:", e);
-      setUpdateError("Güncelleme kontrolü başarısız oldu.");
+      if (isNoUpdateError(e)) {
+        setUpdateAvailable(null);
+        setUpdateError(null);
+        setUpdateStatus("Mevcut surum guncel.");
+        if (showUIMessages) showToast("Mevcut sürüm güncel.", "success");
+        return;
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      setUpdateError(`Guncelleme kontrolu basarisiz: ${message}`);
+      setUpdateStatus("");
       if (showUIMessages) showToast("Güncelleme kontrolü başarısız.", "error");
     } finally {
       if (showUIMessages) setIsCheckingUpdate(false);
@@ -367,10 +446,15 @@ function App() {
   };
 
   const installUpdate = async () => {
-    const update = await check();
-    if (!update) return;
-
     try {
+      setUpdateError(null);
+      setUpdateStatus("");
+      const update = await check();
+      if (!update) {
+        setUpdateAvailable(null);
+        setUpdateStatus("Mevcut surum guncel.");
+        return;
+      }
       setUpdateProgress({ downloaded: 0, total: 100 });
       let downloaded = 0;
       let totalLength = 0;
@@ -392,7 +476,15 @@ function App() {
       await relaunch();
     } catch (e) {
       console.error("Update install failed", e);
-      setUpdateError("Güncelleme yüklenirken bir hata oluştu.");
+      if (isNoUpdateError(e)) {
+        setUpdateAvailable(null);
+        setUpdateError(null);
+        setUpdateStatus("Mevcut surum guncel.");
+        setUpdateProgress(null);
+        return;
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      setUpdateError(`Guncelleme yuklenirken hata: ${message}`);
       setUpdateProgress(null);
     }
   };
@@ -665,10 +757,7 @@ function App() {
 
     const handleIframeMessage = (e: MessageEvent) => {
       if (e.data && e.data.type === "open_url" && typeof e.data.url === "string") {
-        openUrl(e.data.url).catch((err) => {
-          console.error("Failed to open mail link:", err);
-          showToast("Link tarayıcıda açılamadı.", "error");
-        });
+        openExternalMailUrl(e.data.url);
       }
     };
     window.addEventListener("message", handleIframeMessage);
@@ -679,7 +768,7 @@ function App() {
       clearPeriodicSync();
       unlistenFocus.then(f => f());
     };
-  }, []);
+  }, [openExternalMailUrl]);
 
   useEffect(() => {
     const cached = tabEmailCacheRef.current[activeTab];
@@ -1317,6 +1406,10 @@ function App() {
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-zinc-200 mb-1">Uygulama Güncellemeleri</h3>
                   <p className="text-xs text-zinc-500 mb-4">FURSOY Mail'in en son özelliklerini ve güvenlik yamalarını almak için uygulamayı güncel tutun.</p>
+                  <div className="mb-4 flex items-center justify-between rounded-lg border border-white/5 bg-[#09090b] px-3 py-2">
+                    <span className="text-xs text-zinc-500">Guncel surum</span>
+                    <span className="text-xs font-semibold text-zinc-200">v{currentVersion || "..."}</span>
+                  </div>
 
                   <div className="space-y-4">
                     {!updateProgress ? (
@@ -1363,6 +1456,9 @@ function App() {
                     )}
                     {updateError && (
                       <p className="text-xs text-red-400 font-medium">{updateError}</p>
+                    )}
+                    {updateStatus && !updateError && (
+                      <p className="text-xs text-emerald-400 font-medium">{updateStatus}</p>
                     )}
                   </div>
                 </div>
@@ -1624,7 +1720,9 @@ function App() {
                         </div>
                       ) : hasLoadedActiveBody ? (
                         <iframe
+                          ref={mailFrameRef}
                           key={activeMail.id}
+                          onLoad={handleMailFrameLoad}
                           srcDoc={`
                       <!DOCTYPE html>
                       <html>
@@ -1650,40 +1748,6 @@ function App() {
                         </head>
                         <body>
                           ${activeMailHtml}
-                          <script>
-                            function sendOpenUrl(url) {
-                              if (!url || url.charAt(0) === "#") return false;
-                              try {
-                                window.parent.postMessage({ type: "open_url", url: new URL(url, document.baseURI).href }, "*");
-                                return true;
-                              } catch (_) {
-                                return false;
-                              }
-                            }
-
-                            document.addEventListener("click", function(e) {
-                              var node = e.target && e.target.nodeType === 1 ? e.target : e.target && e.target.parentElement;
-                              var target = node && node.closest ? node.closest("a[href], area[href]") : null;
-                              if (!target) return;
-
-                              var url = target.getAttribute("href") || target.href;
-                              if (sendOpenUrl(url)) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }
-                            }, true);
-
-                            document.addEventListener("submit", function(e) {
-                              var form = e.target;
-                              if (!form || !form.getAttribute) return;
-
-                              var url = form.getAttribute("action");
-                              if (sendOpenUrl(url)) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }
-                            }, true);
-                          </script>
                         </body>
                       </html>
                     `}

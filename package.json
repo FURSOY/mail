@@ -1,11 +1,12 @@
 {
   "name": "fursoy-mail",
   "private": true,
-  "version": "1.2.5",
+  "version": "1.2.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "generate-latest": "node generate-latest.cjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

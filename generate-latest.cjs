@@ -1,51 +1,95 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-// Yollar
-const packageJsonPath = path.join(__dirname, 'package.json');
-const targetDir = path.join(__dirname, 'src-tauri', 'target', 'release', 'bundle', 'nsis');
-const latestJsonPath = path.join(__dirname, 'latest.json');
+const REPO = process.env.GITHUB_REPOSITORY || "FURSOY/mail";
+const PLATFORM = "windows-x86_64";
 
-try {
-  // 1. package.json'dan versiyonu oku
-  const packageData = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  const version = packageData.version;
+const rootDir = __dirname;
+const packageJsonPath = path.join(rootDir, "package.json");
+const tauriConfigPath = path.join(rootDir, "src-tauri", "tauri.conf.json");
+const nsisDir = path.join(rootDir, "src-tauri", "target", "release", "bundle", "nsis");
+const latestJsonPath = path.join(rootDir, "latest.json");
 
-  // 2. İmza dosyasını bul (v1.2.0 gibi dinamik isimde olacağı için dosyaları tarıyoruz)
-  const files = fs.readdirSync(targetDir);
-  const sigFile = files.find(f => f.endsWith('.exe.sig'));
-  const exeFile = files.find(f => f.endsWith('.exe'));
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
 
-  if (!sigFile || !exeFile) {
-    console.error("HATA: .exe veya .sig dosyası bulunamadı. Lütfen önce 'npm run tauri build' komutunu çalıştırın.");
-    process.exit(1);
+function fail(message) {
+  console.error(`ERROR: ${message}`);
+  process.exit(1);
+}
+
+function decodeSignatureComment(signature) {
+  try {
+    return Buffer.from(signature.trim(), "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function findArtifact(files, version) {
+  const expectedName = `FURSOY Mail_${version}_x64-setup.exe`;
+  if (files.includes(expectedName)) return expectedName;
+
+  const matches = files.filter((name) =>
+    name.endsWith(".exe") &&
+    name.includes(`_${version}_`) &&
+    name.toLowerCase().includes("setup")
+  );
+
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    fail(`Multiple NSIS installers match v${version}: ${matches.join(", ")}`);
   }
 
-  // 3. İmzayı oku
-  const signature = fs.readFileSync(path.join(targetDir, sigFile), 'utf8');
-
-  // 4. Exe adındaki boşlukları vs URL uyumlu hale getir
-  const encodedExeName = encodeURIComponent(exeFile);
-
-  // 5. latest.json içeriğini oluştur
-  const latestJson = {
-    version: version,
-    notes: "Uygulama arka plan senkronizasyonu ve performans güncellemeleri yapıldı.",
-    pub_date: new Date().toISOString(),
-    platforms: {
-      "windows-x86_64": {
-        signature: signature,
-        // GitHub release URL formatı (Bunu istersen Vercel veya başka bir yere göre değiştirebilirsin)
-        url: `https://github.com/FURSOY/mail-releases/releases/download/v${version}/${encodedExeName}`
-      }
-    }
-  };
-
-  // 6. Dosyaya yaz
-  fs.writeFileSync(latestJsonPath, JSON.stringify(latestJson, null, 2));
-  console.log(`✅ latest.json başarıyla oluşturuldu! (Versiyon: v${version})`);
-  console.log(`   Dosya yolu: ${latestJsonPath}`);
-
-} catch (error) {
-  console.error("Beklenmeyen bir hata oluştu:", error);
+  fail(`NSIS installer for v${version} was not found in ${nsisDir}. Run "npm run tauri build" first.`);
 }
+
+const packageData = readJson(packageJsonPath);
+const tauriConfig = readJson(tauriConfigPath);
+const version = packageData.version;
+
+if (!version) fail("package.json does not contain a version.");
+if (tauriConfig.version !== version) {
+  fail(`Version mismatch: package.json is ${version}, tauri.conf.json is ${tauriConfig.version}.`);
+}
+
+if (!fs.existsSync(nsisDir)) {
+  fail(`NSIS bundle directory does not exist: ${nsisDir}`);
+}
+
+const files = fs.readdirSync(nsisDir);
+const exeFile = findArtifact(files, version);
+const sigFile = `${exeFile}.sig`;
+const exePath = path.join(nsisDir, exeFile);
+const sigPath = path.join(nsisDir, sigFile);
+
+if (!fs.existsSync(sigPath)) {
+  fail(`Signature file is missing for ${exeFile}: ${sigFile}`);
+}
+
+const signature = fs.readFileSync(sigPath, "utf8").trim();
+const decodedSignature = decodeSignatureComment(signature);
+
+if (!decodedSignature.includes(`file:${exeFile}`)) {
+  fail(`Signature file does not belong to ${exeFile}. Rebuild updater artifacts before generating latest.json.`);
+}
+
+const latestJson = {
+  version,
+  notes: "Stability, updater, mail rendering, and performance improvements.",
+  pub_date: new Date().toISOString(),
+  platforms: {
+    [PLATFORM]: {
+      signature,
+      url: `https://github.com/${REPO}/releases/download/v${version}/${encodeURIComponent(exeFile)}`,
+    },
+  },
+};
+
+fs.writeFileSync(latestJsonPath, `${JSON.stringify(latestJson, null, 2)}\n`);
+
+console.log(`latest.json generated for v${version}`);
+console.log(`Artifact: ${exePath}`);
+console.log(`Signature: ${sigPath}`);
+console.log(`URL: ${latestJson.platforms[PLATFORM].url}`);
