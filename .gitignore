@@ -30,3 +30,5 @@ src-tauri/.env
 src-tauri/target
 
 ~/.tauri/fursoy-mail.key
+
+latest.json

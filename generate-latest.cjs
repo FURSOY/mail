@@ -82,7 +82,8 @@ const latestJson = {
   platforms: {
     [PLATFORM]: {
       signature,
-      url: `https://github.com/${REPO}/releases/download/v${version}/${encodeURIComponent(exeFile)}`,
+      // encodeURIComponent yerine .replace(/ /g, ".") kullanarak boşlukları noktaya çeviriyoruz
+      url: `https://github.com/${REPO}/releases/download/v${version}/${exeFile.replace(/ /g, ".")}`,
     },
   },
 };
