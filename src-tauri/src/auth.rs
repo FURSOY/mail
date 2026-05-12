@@ -7,14 +7,59 @@ use tokio::time::{timeout, Duration};
 const REDIRECT_URI: &str = "http://127.0.0.1:8123/callback";
 
 /// Read OAuth credentials from environment variables (loaded from .env)
-fn get_client_id() -> String {
-    std::env::var("GOOGLE_CLIENT_ID")
-        .expect("GOOGLE_CLIENT_ID environment variable not set. Create src-tauri/.env file.")
+fn read_credential(name: &str, embedded: Option<&str>) -> Result<String, String> {
+    std::env::var(name)
+        .ok()
+        .or_else(|| embedded.map(str::to_string))
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("{name} bulunamadi. Release build almadan once src-tauri/.env dosyasini kontrol edin."))
 }
 
-fn get_client_secret() -> String {
-    std::env::var("GOOGLE_CLIENT_SECRET")
-        .expect("GOOGLE_CLIENT_SECRET environment variable not set. Create src-tauri/.env file.")
+fn get_client_id() -> Result<String, String> {
+    read_credential("GOOGLE_CLIENT_ID", option_env!("GOOGLE_CLIENT_ID"))
+}
+
+fn get_client_secret() -> Result<String, String> {
+    read_credential("GOOGLE_CLIENT_SECRET", option_env!("GOOGLE_CLIENT_SECRET"))
+}
+
+fn build_auth_url(client_id: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse("https://accounts.google.com/o/oauth2/v2/auth")
+        .map_err(|e| e.to_string())?;
+    url.query_pairs_mut()
+        .append_pair("client_id", client_id)
+        .append_pair("redirect_uri", REDIRECT_URI)
+        .append_pair("response_type", "code")
+        .append_pair("access_type", "offline")
+        .append_pair("prompt", "consent")
+        .append_pair(
+            "scope",
+            "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email",
+        );
+    Ok(url.to_string())
+}
+
+fn open_auth_url(app: &tauri::AppHandle, auth_url: String) -> Result<(), String> {
+    match app.opener().open_url(auth_url.clone(), None::<&str>) {
+        Ok(_) => Ok(()),
+        Err(plugin_error) => {
+            #[cfg(target_os = "windows")]
+            {
+                std::process::Command::new("cmd")
+                    .args(["/C", "start", "", &auth_url])
+                    .spawn()
+                    .map_err(|fallback_error| {
+                        format!("Tarayici acilamadi. Opener: {plugin_error}. Fallback: {fallback_error}")
+                    })?;
+                return Ok(());
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err(format!("Tarayici acilamadi: {plugin_error}"))
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -34,23 +79,16 @@ struct UserInfo {
 
 #[tauri::command]
 pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::AuthInfo, String> {
-    let client_id = get_client_id();
+    let client_id = get_client_id()?;
 
-    // 1. Oauth URL'ini oluştur
-    let auth_url = format!(
-        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&access_type=offline&prompt=consent&scope=https://www.googleapis.com/auth/gmail.modify%20https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/userinfo.profile%20https://www.googleapis.com/auth/userinfo.email",
-        client_id, REDIRECT_URI
-    );
+    // Build the URL first, then start the local callback listener before opening the browser.
+    let auth_url = build_auth_url(&client_id)?;
 
-    // 2. Tarayıcıda aç
-    app.opener()
-        .open_url(auth_url, None::<&str>)
-        .map_err(|e| e.to_string())?;
-
-    // 3. Lokal sunucuyu başlat — tek bağlantı al, sonra kapat
     let listener = TcpListener::bind("127.0.0.1:8123")
         .await
         .map_err(|_| "Port 8123 kullanimda. Lutfen arkada acik kalan uygulamalari kapatin.")?;
+
+    open_auth_url(&app, auth_url)?;
 
     let code_result = timeout(Duration::from_secs(120), async {
         // Only accept connections until we get the code, then exit
@@ -126,8 +164,8 @@ pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::Auth
 }
 
 async fn exchange_code_for_token(code: &str) -> Result<AuthResponse, String> {
-    let client_id = get_client_id();
-    let client_secret = get_client_secret();
+    let client_id = get_client_id()?;
+    let client_secret = get_client_secret()?;
 
     let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
     let params = [
@@ -164,8 +202,8 @@ pub async fn refresh_access_token(app: tauri::AppHandle) -> Result<crate::db::Au
         return Err("No refresh token available. Please login again.".into());
     }
 
-    let client_id = get_client_id();
-    let client_secret = get_client_secret();
+    let client_id = get_client_id()?;
+    let client_secret = get_client_secret()?;
 
     let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
     let params = [
