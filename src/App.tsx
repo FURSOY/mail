@@ -8,7 +8,7 @@ import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, 
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { tr } from "./i18n";
-import { typography, ui } from "./theme";
+import { themePresets, typography, ui, type ThemePresetName } from "./theme";
 import "./index.css";
 
 function decodeBasicHtmlEntities(html: string): string {
@@ -131,6 +131,12 @@ const YEAR_OR_STANDARD_RE = /^(?:19|20)\d{2}$|^27001$|^27701$|^22301$|^9001$|^42
 
 type OtpMode = "off" | "balanced" | "strict";
 type RenderMode = "full" | "simple";
+type DensityMode = "comfortable" | "compact";
+
+function readThemePreset(): ThemePresetName {
+  const saved = localStorage.getItem("fursoy_theme_preset");
+  return saved && saved in themePresets ? saved as ThemePresetName : "blue";
+}
 
 /** Detect OTP / verification codes using advanced context scoring. */
 function extractVerificationCode(email: { subject: string; snippet: string; body_html: string }, mode: OtpMode = "balanced"): string | null {
@@ -242,7 +248,7 @@ interface MailDebugMetrics {
   cachedMessages: number;
 }
 
-function EmailHtmlView({ html, onOpenUrl }: { html: string; onOpenUrl: (url: string) => void }) {
+function EmailHtmlView({ html, fitWidth, onOpenUrl }: { html: string; fitWidth: boolean; onOpenUrl: (url: string) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -253,18 +259,51 @@ function EmailHtmlView({ html, onOpenUrl }: { html: string; onOpenUrl: (url: str
     root.innerHTML = `
       <style>
         * { box-sizing: border-box; }
-        :host { display: block; height: 100%; background: #fff; color: #1a1a1a; }
-        .email-content { min-height: 100%; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-        img { max-width: 100% !important; height: auto !important; }
-        table { max-width: 100% !important; }
-        td, th { max-width: 100%; }
-        pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+        :host { display: block; width: 100%; height: 100%; min-width: 0; background: #fff; color: #1a1a1a; overflow: auto; }
+        .email-fit-shell { width: 100%; min-height: 100%; overflow-x: hidden; }
+        .email-scale-stage { width: 100%; min-width: 0; transform-origin: top left; }
+        .email-content { width: 100%; max-width: 100%; min-height: 100%; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: clamp(13px, 1.1vw, 15px); line-height: 1.6; overflow-x: hidden; overflow-wrap: anywhere; word-break: break-word; }
+        .email-content * { box-sizing: border-box; max-width: 100% !important; }
+        img, video, canvas, svg { max-width: 100% !important; height: auto !important; }
+        table { width: auto !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse; }
+        td, th { max-width: 100% !important; overflow-wrap: anywhere; word-break: break-word; }
+        pre, code { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+        div, section, article, main, header, footer { max-width: 100% !important; }
         .plain-text { white-space: pre-wrap; }
         a { color: #2563eb; cursor: pointer; }
         button, [role="button"], input[type="button"], input[type="submit"] { cursor: pointer; }
+        [width] { max-width: 100% !important; }
       </style>
-      <div class="email-content">${html}</div>
+      <div class="email-fit-shell"><div class="email-scale-stage"><div class="email-content">${html}</div></div></div>
     `;
+
+    const shell = root.querySelector(".email-fit-shell") as HTMLElement | null;
+    const stage = root.querySelector(".email-scale-stage") as HTMLElement | null;
+
+    const applyFit = () => {
+      if (!shell || !stage) return;
+      stage.style.transform = "";
+      stage.style.width = "100%";
+      shell.style.minHeight = "100%";
+
+      if (!fitWidth) return;
+
+      const availableWidth = Math.max(1, shell.clientWidth);
+      const naturalWidth = Math.max(stage.scrollWidth, stage.getBoundingClientRect().width);
+      if (naturalWidth <= availableWidth + 2) return;
+
+      const scale = Math.max(0.55, Math.min(1, availableWidth / naturalWidth));
+      stage.style.width = `${100 / scale}%`;
+      stage.style.transform = `scale(${scale})`;
+      shell.style.minHeight = `${Math.ceil(stage.scrollHeight * scale)}px`;
+    };
+
+    applyFit();
+    const resizeObserver = new ResizeObserver(applyFit);
+    resizeObserver.observe(host);
+    if (shell) resizeObserver.observe(shell);
+    const imageElements = Array.from(root.querySelectorAll("img"));
+    imageElements.forEach((img) => img.addEventListener("load", applyFit));
 
     const resolveUrl = (url: string | null | undefined) => {
       if (!url || url.startsWith("#")) return null;
@@ -316,12 +355,14 @@ function EmailHtmlView({ html, onOpenUrl }: { html: string; onOpenUrl: (url: str
     root.addEventListener("submit", handleSubmit, true);
 
     return () => {
+      resizeObserver.disconnect();
+      imageElements.forEach((img) => img.removeEventListener("load", applyFit));
       root.removeEventListener("click", handleClick, true);
       root.removeEventListener("submit", handleSubmit, true);
     };
-  }, [html, onOpenUrl]);
+  }, [html, fitWidth, onOpenUrl]);
 
-  return <div ref={hostRef} className="h-full w-full overflow-auto bg-white" />;
+  return <div ref={hostRef} className="h-full w-full min-w-0 overflow-auto overscroll-contain bg-white" />;
 }
 
 interface AuthInfo {
@@ -362,9 +403,16 @@ function App() {
   const [renderMode, setRenderMode] = useState<RenderMode>(() => {
     return localStorage.getItem("fursoy_render_mode") === "simple" ? "simple" : "full";
   });
+  const [fitMailToWidth, setFitMailToWidth] = useState(() => {
+    return localStorage.getItem("fursoy_fit_mail_to_width") !== "false";
+  });
   const [otpMode, setOtpMode] = useState<OtpMode>(() => {
     const saved = localStorage.getItem("fursoy_otp_mode");
     return saved === "off" || saved === "strict" ? saved : "balanced";
+  });
+  const [themePreset, setThemePreset] = useState<ThemePresetName>(() => readThemePreset());
+  const [densityMode, setDensityMode] = useState<DensityMode>(() => {
+    return localStorage.getItem("fursoy_density_mode") === "compact" ? "compact" : "comfortable";
   });
   const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [selectedMailBody, setSelectedMailBody] = useState("");
@@ -385,6 +433,7 @@ function App() {
   const [isSending, setIsSending] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [readingToolsOpen, setReadingToolsOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -430,6 +479,15 @@ function App() {
   useEffect(() => {
     accessTokenRef.current = accessToken;
   }, [accessToken]);
+
+  useEffect(() => {
+    const preset = themePresets[themePreset];
+    const root = document.documentElement;
+    root.style.setProperty("--app-accent", preset.accent);
+    root.style.setProperty("--app-accent-hover", preset.accentHover);
+    root.style.setProperty("--app-accent-soft", preset.accentSoft);
+    root.dataset.density = densityMode;
+  }, [themePreset, densityMode]);
 
   useEffect(() => {
     getVersion()
@@ -1121,11 +1179,20 @@ function App() {
     <div className="flex flex-col h-screen bg-[#09090b] text-zinc-300 font-sans overflow-hidden select-none">
 
       {/* CUSTOM TITLEBAR */}
-      <div data-tauri-drag-region className="h-9 shrink-0 flex items-center justify-between pl-2 pr-0 border-b border-white/5 bg-[#09090b]" style={{ WebkitAppRegion: 'drag' } as any}>
+      <div
+        data-tauri-drag-region
+        className="relative z-[60] h-9 shrink-0 flex items-center justify-between pl-2 pr-0 border-b border-white/5 bg-[#09090b]"
+        style={{ WebkitAppRegion: 'drag' } as any}
+        onMouseDown={(event) => {
+          if (!mobileMenuOpen) return;
+          if ((event.target as HTMLElement).closest("button")) return;
+          setMobileMenuOpen(false);
+        }}
+      >
         <div data-tauri-drag-region className="flex items-center gap-2 text-xs font-medium text-zinc-500 pl-1">
           <button
             type="button"
-            onClick={() => setMobileMenuOpen(true)}
+            onClick={() => setMobileMenuOpen(open => !open)}
             className="md:hidden -ml-1 mr-1 flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-white/10 hover:text-zinc-200"
             style={{ WebkitAppRegion: 'no-drag' } as any}
             aria-label="Menüyü aç"
@@ -1161,23 +1228,18 @@ function App() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {mobileMenuOpen && (
-          <div className="fixed inset-x-0 bottom-0 top-9 z-40 md:hidden">
-            <button
-              type="button"
-              className="absolute inset-0 bg-black/55"
-              onClick={() => setMobileMenuOpen(false)}
-              aria-label="Menüyü kapat"
-            />
-          </div>
-        )}
+        <div
+          className={`fixed inset-x-0 bottom-0 top-9 z-40 bg-black/55 transition-opacity duration-200 md:hidden ${mobileMenuOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden={!mobileMenuOpen}
+        />
 
         {/* SIDEBAR */}
-        <aside className={`${mobileMenuOpen ? 'fixed left-0 top-9 bottom-0 z-50 flex shadow-2xl shadow-black/40' : 'hidden'} md:static md:z-auto md:flex w-56 bg-[#0c0c0e] border-r border-white/5 flex-col`}>
+        <aside className={`fixed left-0 top-9 bottom-0 z-50 flex w-56 flex-col border-r border-white/5 bg-[#0c0c0e]/95 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform duration-200 ease-out md:static md:z-auto md:flex md:translate-x-0 md:shadow-none ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full pointer-events-none md:pointer-events-auto"}`}>
           <nav className="flex-1 p-2 pt-3 space-y-0.5">
             <button
               onClick={() => goToTab("inbox")}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'inbox' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'inbox' ? 'bg-[var(--app-accent-soft)] text-zinc-100 shadow-[inset_2px_0_0_var(--app-accent)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Inbox className="w-4 h-4" /> {tr.nav.inbox}
               {unreadCount > 0 && (
@@ -1186,13 +1248,13 @@ function App() {
             </button>
             <button
               onClick={() => goToTab("sent")}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'sent' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'sent' ? 'bg-[var(--app-accent-soft)] text-zinc-100 shadow-[inset_2px_0_0_var(--app-accent)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Send className="w-4 h-4" /> {tr.nav.sent}
             </button>
             <button
               onClick={() => goToTab("archive")}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'archive' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'archive' ? 'bg-[var(--app-accent-soft)] text-zinc-100 shadow-[inset_2px_0_0_var(--app-accent)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Archive className="w-4 h-4" /> {tr.nav.archive}
             </button>
@@ -1201,13 +1263,13 @@ function App() {
 
             <button
               onClick={() => goToTab("spam")}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'spam' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'spam' ? 'bg-[var(--app-accent-soft)] text-zinc-100 shadow-[inset_2px_0_0_var(--app-accent)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <ShieldAlert className="w-4 h-4" /> {tr.nav.spam}
             </button>
             <button
               onClick={() => goToTab("trash")}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'trash' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'trash' ? 'bg-[var(--app-accent-soft)] text-zinc-100 shadow-[inset_2px_0_0_var(--app-accent)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Trash2 className="w-4 h-4" /> {tr.nav.trash}
             </button>
@@ -1216,7 +1278,7 @@ function App() {
 
             <button
               onClick={() => goToTab("settings")}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-white/10 text-zinc-100' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-[var(--app-accent-soft)] text-zinc-100 shadow-[inset_2px_0_0_var(--app-accent)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
             >
               <Settings className="w-4 h-4" /> {tr.nav.settings}
             </button>
@@ -1302,6 +1364,57 @@ function App() {
               </h2>
 
               <div className="space-y-8">
+                {/* Appearance */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-200 mb-1">{tr.appearance.title}</h3>
+                  <p className="text-xs text-zinc-500 mb-4">{tr.appearance.description}</p>
+
+                  <div className="space-y-5">
+                    <div>
+                      <div className="text-xs font-medium text-zinc-300 mb-2">{tr.appearance.accentColor}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {(Object.keys(themePresets) as ThemePresetName[]).map((name) => {
+                          const preset = themePresets[name];
+                          const active = themePreset === name;
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => {
+                                setThemePreset(name);
+                                localStorage.setItem("fursoy_theme_preset", name);
+                              }}
+                              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-all ${active ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-zinc-100" : "border-white/10 bg-[#09090b] text-zinc-400 hover:bg-white/5 hover:text-zinc-200"}`}
+                            >
+                              <span className="h-3.5 w-3.5 rounded-full" style={{ backgroundColor: preset.accent }} />
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-medium text-zinc-300 mb-2">{tr.appearance.density}</div>
+                      <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
+                        {(["comfortable", "compact"] as DensityMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              setDensityMode(mode);
+                              localStorage.setItem("fursoy_density_mode", mode);
+                            }}
+                            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${densityMode === mode ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                          >
+                            {mode === "comfortable" ? tr.appearance.comfortable : tr.appearance.compact}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Sync Interval */}
                 <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-zinc-200 mb-1">Senkronizasyon Sıklığı</h3>
@@ -1625,8 +1738,8 @@ function App() {
                   <div
                     key={mail.id}
                     onClick={() => handleMailClick(mail)}
-                    className={`px-4 py-3 border-b border-white/[0.03] cursor-pointer transition-all relative ${selectedMail === mail.id
-                      ? 'bg-blue-500/10 border-l-2 border-l-blue-500'
+                    className={`px-4 py-[var(--mail-row-py)] border-b border-white/[0.03] cursor-pointer transition-all duration-200 relative ${selectedMail === mail.id
+                      ? 'bg-[var(--app-accent-soft)] border-l-2 border-l-[var(--app-accent)]'
                       : 'hover:bg-white/[0.02] border-l-2 border-l-transparent'
                       }`}
                   >
@@ -1723,11 +1836,82 @@ function App() {
                         </button>
                       </ToolbarTip>
                     )}
+                    <div className="mx-1 h-5 w-px bg-white/5" />
+                    <ToolbarTip label={tr.reading.settings}>
+                      <button
+                        type="button"
+                        onClick={() => setReadingToolsOpen(open => !open)}
+                        className={`p-2 rounded-md transition-colors ${readingToolsOpen ? "bg-[var(--app-accent-soft)] text-zinc-100" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"}`}
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                    </ToolbarTip>
                   </div>
                 </div>
 
+                <aside
+                  className={`absolute bottom-0 right-0 top-12 z-20 hidden w-72 border-l border-white/10 bg-[#0c0c0e]/95 p-4 shadow-2xl shadow-black/30 backdrop-blur-xl transition-transform duration-200 md:block ${readingToolsOpen ? "translate-x-0" : "translate-x-full"}`}
+                  aria-hidden={!readingToolsOpen}
+                >
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-zinc-200">{tr.reading.settings}</h3>
+                    <button
+                      type="button"
+                      onClick={() => setReadingToolsOpen(false)}
+                      className="rounded-md p-1 text-zinc-500 hover:bg-white/10 hover:text-zinc-200"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-5">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={fitMailToWidth}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFitMailToWidth(checked);
+                          localStorage.setItem("fursoy_fit_mail_to_width", checked.toString());
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-[#09090b] text-blue-500 focus:ring-0 focus:ring-offset-0"
+                      />
+                      <span>
+                        <span className="block text-sm text-zinc-300">{tr.reading.fitWidth}</span>
+                        <span className="mt-1 block text-[11px] leading-relaxed text-zinc-600">{tr.reading.fitWidthHint}</span>
+                      </span>
+                    </label>
+
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-zinc-300">{tr.reading.renderMode}</div>
+                      <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenderMode("full");
+                            localStorage.setItem("fursoy_render_mode", "full");
+                          }}
+                          className={`px-3 py-1.5 text-xs rounded-md transition-colors ${renderMode === "full" ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                        >
+                          Tam HTML
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenderMode("simple");
+                            localStorage.setItem("fursoy_render_mode", "simple");
+                          }}
+                          className={`px-3 py-1.5 text-xs rounded-md transition-colors ${renderMode === "simple" ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                        >
+                          Basit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col" style={{ minHeight: 0 }}>
-                  <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col" style={{ minHeight: 0 }}>
+                  <div className="mx-auto flex w-full max-w-[1040px] min-w-0 flex-1 flex-col" style={{ minHeight: 0 }}>
                     <h1 className="text-xl font-bold text-zinc-100 mb-5 shrink-0">{activeMail.subject}</h1>
 
                     {/* Verification Code Banner */}
@@ -1759,7 +1943,7 @@ function App() {
 
                     <div className="flex items-center justify-between mb-5 pb-5 border-b border-white/5 shrink-0">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-[var(--app-accent)] flex items-center justify-center text-white text-sm font-bold shrink-0">
                           {activeMail.sender.charAt(0).toUpperCase() || "U"}
                         </div>
                         <div>
@@ -1807,7 +1991,7 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
+                    <div className="flex-1 flex min-w-0 flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
                       {isBodyLoading ? (
                         <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
                           {tr.mail.loadingBody}
@@ -1817,7 +2001,7 @@ function App() {
                           {bodyError}
                         </div>
                       ) : hasLoadedActiveBody ? (
-                        <EmailHtmlView key={activeMail.id} html={activeMailHtml} onOpenUrl={openExternalMailUrl} />
+                        <EmailHtmlView key={activeMail.id} html={activeMailHtml} fitWidth={fitMailToWidth} onOpenUrl={openExternalMailUrl} />
                       ) : (
                         <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
                           {tr.mail.preparingBody}

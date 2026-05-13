@@ -15,3 +15,38 @@ export const typography = {
   sectionTitle: "text-sm font-semibold text-zinc-200",
   bodyMuted: "text-xs text-zinc-500",
 };
+
+export const themePresets = {
+  blue: {
+    label: "Mavi",
+    accent: "#3b82f6",
+    accentHover: "#2563eb",
+    accentSoft: "rgb(59 130 246 / 0.14)",
+  },
+  emerald: {
+    label: "Yeşil",
+    accent: "#10b981",
+    accentHover: "#059669",
+    accentSoft: "rgb(16 185 129 / 0.14)",
+  },
+  violet: {
+    label: "Mor",
+    accent: "#8b5cf6",
+    accentHover: "#7c3aed",
+    accentSoft: "rgb(139 92 246 / 0.14)",
+  },
+  rose: {
+    label: "Rose",
+    accent: "#f43f5e",
+    accentHover: "#e11d48",
+    accentSoft: "rgb(244 63 94 / 0.14)",
+  },
+  amber: {
+    label: "Amber",
+    accent: "#f59e0b",
+    accentHover: "#d97706",
+    accentSoft: "rgb(245 158 11 / 0.14)",
+  },
+} as const;
+
+export type ThemePresetName = keyof typeof themePresets;

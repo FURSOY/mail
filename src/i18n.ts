@@ -43,6 +43,12 @@ export const tr = {
     cancel: "İptal",
     sendReply: "Yanıtı gönder",
   },
+  reading: {
+    settings: "Okuma ayarları",
+    fitWidth: "Genişliğe sığdır",
+    fitWidthHint: "Geniş HTML mailleri yatay kaydırma olmadan okuma alanına ölçekler.",
+    renderMode: "Render modu",
+  },
   update: {
     title: "Uygulama güncellemeleri",
     description: "FURSOY Mail'in en son özelliklerini ve güvenlik düzeltmelerini almak için uygulamayı güncel tutun.",
@@ -64,6 +70,14 @@ export const tr = {
     enabled: "Otomatik başlatma açıldı.",
     disabled: "Otomatik başlatma kapatıldı.",
     failed: "Otomatik başlatma ayarı değiştirilemedi.",
+  },
+  appearance: {
+    title: "Görünüm",
+    description: "Uygulamanın ana rengini ve genel hissini özelleştirin.",
+    accentColor: "Ana renk",
+    density: "Yoğunluk",
+    comfortable: "Rahat",
+    compact: "Kompakt",
   },
   actions: {
     refresh: "Yenile",

@@ -3,6 +3,7 @@ mod db;
 mod gmail;
 mod notify;
 mod settings;
+mod window_state;
 
 use std::sync::Mutex;
 
@@ -21,9 +22,13 @@ pub fn run() {
         })
         .manage(notify::PendingNotification(Mutex::new(None)))
         .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                window_state::save_window_state(window);
+            }
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 // Only intercept close on main window; let notification window close normally
                 if window.label() == "main" {
+                    window_state::save_window_state(window);
                     let _ = window.hide();
                     api.prevent_close();
                 }
@@ -36,6 +41,7 @@ pub fn run() {
 
             // Initialize database on startup
             db::init_db(app.handle()).expect("Failed to initialize database");
+            window_state::restore_window_state(app.handle());
 
             // Setup System Tray
             use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager};
