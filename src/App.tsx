@@ -81,10 +81,16 @@ const MAX_LABEL_CACHE = 5;
 const STARTUP_NETWORK_DELAY_MS = 5000;
 const STARTUP_UPDATE_DELAY_MS = 9000;
 const MAIL_TABS = new Set(["inbox", "sent", "archive", "spam", "trash"]);
+const AUTH_RELOGIN_MESSAGE = "Oturum yenilenemedi. Lütfen tekrar giriş yapın.";
 
 function isNoUpdateError(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
   return /no update|not available|up to date|guncel|güncel|204/.test(message);
+}
+
+function isAuthFailure(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return /401|unauthorized|invalid_grant|invalid credentials|unauthenticated|autherror|expected oauth 2 access token|no refresh token|oturum yenilenemedi/.test(message);
 }
 
 function byteLength(text: string): number {
@@ -492,6 +498,8 @@ function App() {
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recentNotificationsRef = useRef<Record<string, string>>({});
   const notifiedUpdateVersionRef = useRef<string | null>(null);
+  const lastToastRef = useRef<{ msg: string; type: "error" | "success" | "info"; at: number } | null>(null);
+  const tokenExpiredRef = useRef(tokenExpired);
   /** Latest access token for interval/manual sync (avoids stale closure + matches React state). */
   const accessTokenRef = useRef<string | null>(null);
   const backgroundSyncRef = useRef<
@@ -515,6 +523,7 @@ function App() {
   pauseOnFullscreenRef.current = pauseOnFullscreen;
   const appControlsRef = useRef(appControls);
   appControlsRef.current = appControls;
+  tokenExpiredRef.current = tokenExpired;
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -562,9 +571,36 @@ function App() {
   // Toast helper
   const showToast = useCallback((msg: string, type: 'error' | 'success' | 'info' = 'info') => {
     const id = Date.now();
-    setToasts(prev => [...prev.slice(-2), { id, msg, type }]);
+    const lastToast = lastToastRef.current;
+    if (lastToast?.msg === msg && lastToast.type === type && id - lastToast.at < 8000) {
+      return;
+    }
+
+    lastToastRef.current = { msg, type, at: id };
+    setToasts(prev => {
+      const deduped = prev.filter(toast => toast.msg !== msg || toast.type !== type);
+      return [...deduped.slice(-2), { id, msg, type }];
+    });
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
+
+  const markSessionExpired = useCallback((showMessage = true) => {
+    if (tokenExpiredRef.current) return;
+
+    tokenExpiredRef.current = true;
+    setTokenExpired(true);
+    setAccessToken(null);
+    accessTokenRef.current = null;
+    setIsUserSyncing(false);
+    setIsBackgroundSyncing(false);
+    if (syncIntervalRef.current !== null) {
+      clearInterval(syncIntervalRef.current);
+      syncIntervalRef.current = null;
+    }
+    if (showMessage) {
+      showToast(AUTH_RELOGIN_MESSAGE, "error");
+    }
+  }, [showToast]);
 
   const openExternalMailUrl = useCallback((url: string) => {
     if (!url || url.startsWith("#")) return;
@@ -827,25 +863,25 @@ function App() {
       await invoke("sync_emails", { accessToken: token });
       return token;
     } catch (e: unknown) {
-      const errStr = String(e);
-      if (errStr.includes("401") || errStr.includes("Unauthorized") || errStr.includes("invalid_grant")) {
+      if (isAuthFailure(e)) {
         try {
           const refreshed = await invoke<AuthInfo>("refresh_access_token");
           accessTokenRef.current = refreshed.access_token;
           setUserInfo(refreshed);
           setAccessToken(refreshed.access_token);
+          tokenExpiredRef.current = false;
           setTokenExpired(false);
           await invoke("sync_emails", { accessToken: refreshed.access_token });
           return refreshed.access_token;
-        } catch {
-          setTokenExpired(true);
-          showToast("Oturum süresi doldu. Tekrar giriş yapın.", "error");
-          throw e;
+        } catch (refreshError) {
+          console.error("Token refresh failed:", refreshError);
+          markSessionExpired();
+          throw new Error(AUTH_RELOGIN_MESSAGE);
         }
       }
       throw e;
     }
-  }, [showToast]);
+  }, [markSessionExpired]);
 
   // Fetch inbox unread count (always from DB, regardless of active tab)
   const refreshUnreadCount = async () => {
@@ -917,6 +953,13 @@ function App() {
     if (!token) return false;
 
     const userInitiated = opts?.userInitiated ?? false;
+    if (tokenExpiredRef.current) {
+      if (userInitiated) {
+        markSessionExpired();
+      }
+      return false;
+    }
+
     if (appControlsRef.current.mailSyncPaused && !userInitiated) {
       return false;
     }
@@ -968,6 +1011,10 @@ function App() {
       return true;
     } catch (e) {
       console.error("Background sync failed:", e);
+      if (isAuthFailure(e)) {
+        markSessionExpired();
+        return false;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       showToast(`Senkronizasyon başarısız: ${msg}`, "error");
       return false;
@@ -1007,8 +1054,12 @@ function App() {
                 setAccessToken(refreshed.access_token);
                 accessTokenRef.current = refreshed.access_token;
                 activeToken = refreshed.access_token;
-              } catch {
-                console.log("Token refresh skipped, using existing token");
+              } catch (refreshError) {
+                if (isAuthFailure(refreshError)) {
+                  markSessionExpired();
+                  return;
+                }
+                console.log("Token refresh skipped, using existing token", refreshError);
               }
 
               if (!cancelled) {
@@ -1060,7 +1111,7 @@ function App() {
       clearPeriodicSync();
       unlistenFocus.then(f => f());
     };
-  }, [openExternalMailUrl, shouldDeferNetworkForGameMode]);
+  }, [openExternalMailUrl, shouldDeferNetworkForGameMode, markSessionExpired]);
 
   useEffect(() => {
     if (!MAIL_TABS.has(activeTab)) {
@@ -1103,6 +1154,7 @@ function App() {
       setAccessToken(res.access_token);
       accessTokenRef.current = res.access_token;
       setAuthStatus(tr.auth.loggedInSyncing);
+      tokenExpiredRef.current = false;
       setTokenExpired(false);
 
       const ok = await backgroundSyncRef.current(res.access_token, { userInitiated: true });
@@ -1127,6 +1179,8 @@ function App() {
       setUserInfo(null);
       setAccessToken(null);
       accessTokenRef.current = null;
+      tokenExpiredRef.current = false;
+      setTokenExpired(false);
       setEmails([]);
       setSelectedMail(null);
       setSelectedMailBody("");
@@ -2312,7 +2366,7 @@ function App() {
         <div className="absolute top-9 left-0 right-0 bg-red-500/90 backdrop-blur-sm px-4 py-2 flex items-center justify-between z-50">
           <div className="flex items-center gap-2 text-white text-xs font-medium">
             <AlertTriangle className="w-3.5 h-3.5" />
-            Oturum süresi doldu. Tekrar giriş yapın.
+            {AUTH_RELOGIN_MESSAGE}
           </div>
           <button
             onClick={loginWithGoogle}

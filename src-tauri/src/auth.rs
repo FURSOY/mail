@@ -150,9 +150,18 @@ pub async fn start_google_oauth(app: tauri::AppHandle) -> Result<crate::db::Auth
 
     let user_info: UserInfo = user_res.json().await.map_err(|e| e.to_string())?;
 
+    let existing_auth = crate::db::get_auth_info(app.clone()).ok().flatten();
+    let refresh_token = auth_resp.refresh_token.unwrap_or_else(|| {
+        existing_auth
+            .as_ref()
+            .filter(|auth| auth.email == user_info.email)
+            .map(|auth| auth.refresh_token.clone())
+            .unwrap_or_default()
+    });
+
     let auth_info = crate::db::AuthInfo {
         access_token: auth_resp.access_token,
-        refresh_token: auth_resp.refresh_token.unwrap_or_default(),
+        refresh_token,
         email: user_info.email,
         picture: user_info.picture.unwrap_or_default(),
     };
