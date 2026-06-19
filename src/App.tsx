@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu, Columns2, PanelLeft, Rows3 } from "lucide-react";
+import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Plus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu, Columns2, PanelLeft, Rows3, Maximize2 } from "lucide-react";
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { tr } from "./i18n";
@@ -76,7 +76,30 @@ function sanitizeEmailHtml(html: string, fallback: string): string {
   return `${styles}${bodyMatch ? bodyMatch[1] : cleaned}`;
 }
 
-const LARGE_BODY_RENDER_LIMIT = 750_000;
+const LARGE_BODY_RENDER_LIMIT = 4_000_000;
+/** Inline data: URIs (embedded images) larger than this are dropped to avoid pathological payloads. */
+const MAX_INLINE_DATA_URI = 4_000_000;
+/** Emails whose content refuses to shrink below this width are treated as fixed-layout cards
+ *  (rendered at their own width on the dark surface) rather than stretched to fill the panel. */
+const FIXED_LAYOUT_MIN_WIDTH = 460;
+/** In "fit" mode, narrow fixed-layout emails are scaled up to fill the panel, but no more than
+ *  this factor so a tiny email isn't blown up absurdly. */
+const MAX_FIT_UPSCALE = 2;
+
+/** Remote email images are fetched through the Rust backend (custom protocol) so that servers
+ *  sending restrictive Cross-Origin-Resource-Policy headers don't get blocked (ERR_BLOCKED_BY_RESPONSE).
+ *  On Windows, Tauri serves registered custom schemes at http://<scheme>.localhost. */
+const IMAGE_PROXY_BASE = "http://mailimg.localhost/?url=";
+
+/** Route http(s) <img> sources through the backend proxy; strip srcset so it can't bypass it. */
+function proxifyEmailImages(html: string): string {
+  return html
+    .replace(
+      /(<img\b[^>]*?\ssrc\s*=\s*)(["'])(https?:\/\/[^"']+)\2/gi,
+      (_match, prefix, quote, url) => `${prefix}${quote}${IMAGE_PROXY_BASE}${encodeURIComponent(url)}${quote}`
+    )
+    .replace(/\ssrcset\s*=\s*("[^"]*"|'[^']*')/gi, "");
+}
 const MAX_LABEL_CACHE = 5;
 const STARTUP_NETWORK_DELAY_MS = 5000;
 const STARTUP_UPDATE_DELAY_MS = 9000;
@@ -103,10 +126,11 @@ function buildRenderableEmailHtml(html: string, fallback: string, mode: RenderMo
     return `<div class="plain-text">${escapeHtml(plain || fallback || "").replace(/\n/g, "<br/>")}</div>`;
   }
 
-  return sanitizeEmailHtml(html, fallback).replace(
-    /\s(src|href)\s*=\s*(["'])data:([^"']{250000,})\2/gi,
+  const sanitized = sanitizeEmailHtml(html, fallback).replace(
+    new RegExp(`\\s(src|href)\\s*=\\s*(["'])data:([^"']{${MAX_INLINE_DATA_URI},})\\2`, "gi"),
     ""
   );
+  return proxifyEmailImages(sanitized);
 }
 
 /** Remove ZWSP etc.; collapse spaced digits from HTML chunks. */
@@ -140,6 +164,18 @@ const YEAR_OR_STANDARD_RE = /^(?:19|20)\d{2}$|^27001$|^27701$|^22301$|^9001$|^42
 
 type OtpMode = "off" | "balanced" | "strict";
 type RenderMode = "full" | "simple";
+type MailZoom = "fit" | number;
+
+const ZOOM_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5, 1.75, 2];
+const MIN_ZOOM = ZOOM_STEPS[0];
+const MAX_ZOOM = ZOOM_STEPS[ZOOM_STEPS.length - 1];
+
+function readMailZoom(): MailZoom {
+  const saved = localStorage.getItem("fursoy_mail_zoom");
+  if (!saved || saved === "fit") return "fit";
+  const value = parseFloat(saved);
+  return Number.isFinite(value) ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value)) : "fit";
+}
 type DensityMode = "comfortable" | "compact";
 type MailViewMode = "split" | "single-toggle" | "inbox-first";
 type MailViewPreference = "auto" | MailViewMode;
@@ -264,122 +300,214 @@ interface MailDebugMetrics {
   cachedMessages: number;
 }
 
-function EmailHtmlView({ html, fitWidth, onOpenUrl }: { html: string; fitWidth: boolean; onOpenUrl: (url: string) => void }) {
-  const hostRef = useRef<HTMLDivElement>(null);
+function resolveEmailUrl(url: string | null | undefined): string | null {
+  if (!url || url.startsWith("#")) return null;
+  try {
+    const resolved = new URL(url, "https://mail.google.com/").href;
+    return /^(https?:|mailto:|tel:)/i.test(resolved) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
+function findEmailUrl(eventTarget: EventTarget | null): string | null {
+  const node = eventTarget instanceof Element ? eventTarget : null;
+  const link = node?.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
+  if (link) return resolveEmailUrl(link.getAttribute("href") || link.href);
 
-    const root = host.shadowRoot || host.attachShadow({ mode: "open" });
-    root.innerHTML = `
-      <style>
-        * { box-sizing: border-box; }
-        :host { display: block; width: 100%; height: 100%; min-width: 0; background: #fff; color: #1a1a1a; overflow: auto; user-select: text; }
-        ::selection { background: rgba(59, 130, 246, 0.25); color: inherit; }
-        .email-fit-shell { width: 100%; min-height: 100%; overflow-x: hidden; }
-        .email-scale-stage { width: 100%; min-width: 0; transform-origin: top left; }
-        .email-content { width: 100%; max-width: 100%; min-height: 100%; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: clamp(13px, 1.1vw, 15px); line-height: 1.6; overflow-x: hidden; overflow-wrap: anywhere; word-break: break-word; user-select: text; cursor: text; }
-        .email-content * { box-sizing: border-box; max-width: 100% !important; }
-        img, video, canvas, svg { max-width: 100% !important; height: auto !important; }
-        table { width: auto !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse; }
-        td, th { max-width: 100% !important; overflow-wrap: anywhere; word-break: break-word; }
-        pre, code { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-        div, section, article, main, header, footer { max-width: 100% !important; }
-        .plain-text { white-space: pre-wrap; }
-        a { color: #2563eb; cursor: pointer; }
-        button, [role="button"], input[type="button"], input[type="submit"] { cursor: pointer; }
-        [width] { max-width: 100% !important; }
-      </style>
-      <div class="email-fit-shell"><div class="email-scale-stage"><div class="email-content">${html}</div></div></div>
-    `;
+  const button = node?.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
+  const form = button?.closest("form") as HTMLFormElement | null;
+  return resolveEmailUrl(
+    button?.getAttribute("formaction") ||
+    button?.getAttribute("data-href") ||
+    button?.getAttribute("data-url") ||
+    form?.getAttribute("action")
+  );
+}
 
-    const shell = root.querySelector(".email-fit-shell") as HTMLElement | null;
-    const stage = root.querySelector(".email-scale-stage") as HTMLElement | null;
-
-    const applyFit = () => {
-      if (!shell || !stage) return;
-      stage.style.transform = "";
-      stage.style.width = "100%";
-      shell.style.minHeight = "100%";
-
-      if (!fitWidth) return;
-
-      const availableWidth = Math.max(1, shell.clientWidth);
-      const naturalWidth = Math.max(stage.scrollWidth, stage.getBoundingClientRect().width);
-      if (naturalWidth <= availableWidth + 2) return;
-
-      const scale = Math.max(0.55, Math.min(1, availableWidth / naturalWidth));
-      stage.style.width = `${100 / scale}%`;
-      stage.style.transform = `scale(${scale})`;
-      shell.style.minHeight = `${Math.ceil(stage.scrollHeight * scale)}px`;
-    };
-
-    applyFit();
-    const resizeObserver = new ResizeObserver(applyFit);
-    resizeObserver.observe(host);
-    if (shell) resizeObserver.observe(shell);
-    const imageElements = Array.from(root.querySelectorAll("img"));
-    imageElements.forEach((img) => img.addEventListener("load", applyFit));
-
-    const resolveUrl = (url: string | null | undefined) => {
-      if (!url || url.startsWith("#")) return null;
-      try {
-        const resolved = new URL(url, "https://mail.google.com/").href;
-        return /^(https?:|mailto:|tel:)/i.test(resolved) ? resolved : null;
-      } catch {
-        return null;
+/** Wrap sanitized email HTML in an isolated document for the iframe. */
+function buildEmailSrcDoc(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+    <style>
+      html, body { margin: 0; padding: 0; background: #fff; }
+      * { box-sizing: border-box; }
+      .mail-root {
+        display: block; width: 100%; min-width: 0; padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 15px; line-height: 1.6; color: #1a1a1a;
       }
+      .mail-root .plain-text { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 720px; }
+      img, video { height: auto; }
+      a { color: #2563eb; }
+      ::selection { background: rgba(59, 130, 246, 0.25); }
+    </style></head>
+    <body><div class="mail-root">${html}</div></body></html>`;
+}
+
+/**
+ * Render an email inside a sandboxed iframe at its natural width, then scale the
+ * whole frame to fit (or to a user-chosen zoom). No max-width forcing — layouts
+ * stay intact; scaling never distorts and never forces a horizontal scroll in fit mode.
+ */
+function EmailHtmlView({
+  html,
+  zoom,
+  relayoutKey,
+  onFitScaleChange,
+  onOpenUrl,
+}: {
+  html: string;
+  zoom: MailZoom;
+  /** Changing this (layout mode / window width) forces a re-measure even without a ResizeObserver hit. */
+  relayoutKey?: string | number;
+  onFitScaleChange?: (scale: number) => void;
+  onOpenUrl: (url: string) => void;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  const applyScale = useCallback(() => {
+    const host = hostRef.current;
+    const stage = stageRef.current;
+    const frame = frameRef.current;
+    if (!host || !stage || !frame) return;
+    const doc = frame.contentDocument;
+    const root = doc?.querySelector(".mail-root") as HTMLElement | null;
+    if (!doc || !root) return;
+
+    const available = Math.max(1, host.clientWidth);
+
+    // 1. Probe the email's minimum intrinsic width: a fixed-layout email (e.g. a 600px
+    //    newsletter table) keeps its width when squeezed, while a fluid email collapses
+    //    toward its text width. This lets us render fixed emails as a centered card on the
+    //    dark surface instead of stretching a white background across the whole panel.
+    frame.style.height = "auto";
+    frame.style.width = "0px";
+    const minContentWidth = Math.max(root.scrollWidth, 1);
+
+    let layoutWidth: number;
+    if (minContentWidth >= FIXED_LAYOUT_MIN_WIDTH) {
+      // Fixed-layout email — render at its own design width (centered, dark gutters).
+      layoutWidth = minContentWidth;
+    } else {
+      // Fluid email — lay it out across the panel (÷ zoom) so it fills the width.
+      const target = zoom === "fit" ? available : Math.max(80, Math.round(available / zoom));
+      frame.style.width = `${target}px`;
+      layoutWidth = Math.max(root.scrollWidth, target);
+    }
+
+    // Fit mode fills the panel width: scale down wide emails, scale up narrow ones (capped),
+    // so an email never sits tiny with empty space beside it.
+    const fitScale = Math.min(MAX_FIT_UPSCALE, available / layoutWidth);
+    const scale = zoom === "fit" ? fitScale : zoom;
+
+    frame.style.width = `${layoutWidth}px`;
+    const layoutHeight = Math.max(root.scrollHeight, 1);
+    frame.style.height = `${layoutHeight}px`;
+    frame.style.transform = `scale(${scale})`;
+    // Floor so a rounding excess never spawns a spurious scrollbar that clips content.
+    stage.style.width = `${Math.floor(layoutWidth * scale)}px`;
+    stage.style.height = `${Math.floor(layoutHeight * scale)}px`;
+
+    if (zoom === "fit") onFitScaleChange?.(fitScale);
+  }, [zoom, onFitScaleChange]);
+
+  const applyScaleRef = useRef(applyScale);
+  applyScaleRef.current = applyScale;
+
+  // Load HTML into the iframe and wire up measuring + link handling.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    let innerCleanup: (() => void) | null = null;
+
+    const handleLoad = () => {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+
+      const remeasure = () => applyScaleRef.current();
+      remeasure();
+
+      const images = Array.from(doc.images);
+      images.forEach((img) => img.addEventListener("load", remeasure));
+
+      const handleClick = (event: Event) => {
+        const url = findEmailUrl(event.target);
+        if (!url) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenUrl(url);
+      };
+      const handleSubmit = (event: Event) => {
+        const form = event.target instanceof HTMLFormElement ? event.target : null;
+        const url = resolveEmailUrl(form?.getAttribute("action"));
+        if (!url) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenUrl(url);
+      };
+      doc.addEventListener("click", handleClick, true);
+      doc.addEventListener("submit", handleSubmit, true);
+
+      innerCleanup = () => {
+        images.forEach((img) => img.removeEventListener("load", remeasure));
+        doc.removeEventListener("click", handleClick, true);
+        doc.removeEventListener("submit", handleSubmit, true);
+      };
     };
 
-    const elementFromTarget = (eventTarget: EventTarget | null) => {
-      return eventTarget instanceof Element ? eventTarget : null;
-    };
-
-    const findUrl = (eventTarget: EventTarget | null) => {
-      const node = elementFromTarget(eventTarget);
-      const link = node?.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
-      if (link) return resolveUrl(link.getAttribute("href") || link.href);
-
-      const button = node?.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
-      const form = button?.closest("form") as HTMLFormElement | null;
-      return resolveUrl(
-        button?.getAttribute("formaction") ||
-        button?.getAttribute("data-href") ||
-        button?.getAttribute("data-url") ||
-        form?.getAttribute("action")
-      );
-    };
-
-    const handleClick = (event: Event) => {
-      const url = findUrl(event.target);
-      if (!url) return;
-      event.preventDefault();
-      event.stopPropagation();
-      onOpenUrl(url);
-    };
-
-    const handleSubmit = (event: Event) => {
-      const form = event.target instanceof HTMLFormElement ? event.target : null;
-      const url = resolveUrl(form?.getAttribute("action"));
-      if (!url) return;
-      event.preventDefault();
-      event.stopPropagation();
-      onOpenUrl(url);
-    };
-
-    root.addEventListener("click", handleClick, true);
-    root.addEventListener("submit", handleSubmit, true);
+    frame.addEventListener("load", handleLoad);
+    frame.srcdoc = buildEmailSrcDoc(html);
 
     return () => {
-      resizeObserver.disconnect();
-      imageElements.forEach((img) => img.removeEventListener("load", applyFit));
-      root.removeEventListener("click", handleClick, true);
-      root.removeEventListener("submit", handleSubmit, true);
+      frame.removeEventListener("load", handleLoad);
+      innerCleanup?.();
     };
-  }, [html, fitWidth, onOpenUrl]);
+  }, [html, onOpenUrl]);
 
-  return <div ref={hostRef} className="h-full w-full min-w-0 overflow-auto overscroll-contain bg-white select-text" />;
+  // Re-scale when zoom changes or the panel resizes.
+  useEffect(() => {
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => applyScale());
+    };
+    schedule();
+    const host = hostRef.current;
+    if (!host) return () => cancelAnimationFrame(frame);
+    const resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(host);
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [applyScale]);
+
+  // Layout-mode/window changes can settle after a CSS transition, so recompute
+  // both immediately and once the transition has had time to finish.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => applyScale());
+    const timer = window.setTimeout(() => applyScale(), 260);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [applyScale, relayoutKey]);
+
+  return (
+    <div ref={hostRef} className="relative w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain bg-[#0a0a0c] select-text">
+      <div ref={stageRef} className="relative mx-auto">
+        <iframe
+          ref={frameRef}
+          title="E-posta içeriği"
+          sandbox="allow-same-origin allow-popups"
+          className="absolute left-0 top-0 block border-0 bg-white"
+          style={{ transformOrigin: "top left", width: 0, height: 0 }}
+        />
+      </div>
+    </div>
+  );
 }
 
 interface AuthInfo {
@@ -453,9 +581,9 @@ function App() {
   const [renderMode, setRenderMode] = useState<RenderMode>(() => {
     return localStorage.getItem("fursoy_render_mode") === "simple" ? "simple" : "full";
   });
-  const [fitMailToWidth, setFitMailToWidth] = useState(() => {
-    return localStorage.getItem("fursoy_fit_mail_to_width") !== "false";
-  });
+  const [mailZoom, setMailZoom] = useState<MailZoom>(() => readMailZoom());
+  /** Auto fit-to-width scale reported by the reader (used to label the zoom control). */
+  const [mailFitScale, setMailFitScale] = useState(1);
   const [appControls, setAppControls] = useState<AppControls>(DEFAULT_APP_CONTROLS);
   const [otpMode, setOtpMode] = useState<OtpMode>(() => {
     const saved = localStorage.getItem("fursoy_otp_mode");
@@ -1424,6 +1552,27 @@ function App() {
     setSinglePanelView("list");
   };
 
+  const persistMailZoom = useCallback((zoom: MailZoom) => {
+    setMailZoom(zoom);
+    localStorage.setItem("fursoy_mail_zoom", zoom === "fit" ? "fit" : String(zoom));
+  }, []);
+
+  const stepMailZoom = useCallback((direction: 1 | -1) => {
+    setMailZoom(prev => {
+      const current = prev === "fit" ? mailFitScale : prev;
+      let index = ZOOM_STEPS.findIndex(step => step >= current - 0.001);
+      if (index === -1) index = ZOOM_STEPS.length - 1;
+      // When stepping down from a value that sits between steps, land on the lower step.
+      if (direction < 0 && ZOOM_STEPS[index] > current + 0.001 && index > 0) index -= 1;
+      const next = Math.min(ZOOM_STEPS.length - 1, Math.max(0, index + direction));
+      const value = ZOOM_STEPS[next];
+      localStorage.setItem("fursoy_mail_zoom", String(value));
+      return value;
+    });
+  }, [mailFitScale]);
+
+  const effectiveZoomPct = Math.round((mailZoom === "fit" ? mailFitScale : mailZoom) * 100);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1501,12 +1650,12 @@ function App() {
   const showMailList = mailViewMode === "split" || !selectedMail || singlePanelView === "list";
   const showMailReader = !!activeMail && (mailViewMode === "split" || singlePanelView === "reader");
   const mailListClassName = mailViewMode === "split"
-    ? `flex flex-col border-r border-white/5 bg-[#09090b] ${selectedMail ? "hidden md:flex md:w-80 lg:w-96" : "flex-1 md:w-80 lg:w-96 md:flex-none"}`
+    ? `flex min-w-0 flex-col border-r border-white/5 bg-[#09090b] ${selectedMail ? "hidden md:flex md:w-80 lg:w-96" : "flex-1 md:w-80 lg:w-96 md:flex-none"}`
     : showMailList
-      ? "flex flex-1 flex-col border-r border-white/5 bg-[#09090b]"
+      ? "flex min-w-0 flex-1 flex-col border-r border-white/5 bg-[#09090b]"
       : "hidden";
   const mailReaderClassName = showMailReader
-    ? "flex-1 flex flex-col bg-[#0a0a0c] relative z-10 select-text"
+    ? "flex-1 min-w-0 flex flex-col bg-[#0a0a0c] relative z-10 select-text"
     : "hidden";
   const sidebarBackdropClassName = `fixed inset-x-0 bottom-0 top-9 z-40 bg-black/55 transition-opacity duration-200 ${usesOverlaySidebar && mobileMenuOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`;
   const sidebarClassName = usesOverlaySidebar
@@ -2242,29 +2391,29 @@ function App() {
                 </div>
 
                 {/* Desktop Toolbar */}
-                <div className="hidden md:flex h-12 items-center justify-between px-5 border-b border-white/5 shrink-0">
-                  <div className="flex items-center gap-1.5">
+                <div className="hidden md:flex h-12 items-center justify-between gap-2 px-3 lg:px-5 border-b border-white/5 shrink-0">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     {mailViewMode !== "split" && (
                       <button
                         type="button"
                         onClick={closeReader}
-                        className="mr-1 rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
+                        className="mr-1 shrink-0 rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200"
                         aria-label="Listeye don"
                         title="Listeye don"
                       >
                         <CornerUpLeft className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    <span className="text-xs text-zinc-500 flex items-center gap-1.5 capitalize">
-                      {activeTab === 'inbox' && <Inbox className="w-3.5 h-3.5" />}
-                      {activeTab === 'sent' && <Send className="w-3.5 h-3.5" />}
-                      {activeTab === 'archive' && <Archive className="w-3.5 h-3.5" />}
-                      {activeTab === 'spam' && <ShieldAlert className="w-3.5 h-3.5" />}
-                      {activeTab === 'trash' && <Trash2 className="w-3.5 h-3.5" />}
-                      {activeTab}
+                    <span className="min-w-0 truncate text-xs text-zinc-500 flex items-center gap-1.5 capitalize">
+                      {activeTab === 'inbox' && <Inbox className="w-3.5 h-3.5 shrink-0" />}
+                      {activeTab === 'sent' && <Send className="w-3.5 h-3.5 shrink-0" />}
+                      {activeTab === 'archive' && <Archive className="w-3.5 h-3.5 shrink-0" />}
+                      {activeTab === 'spam' && <ShieldAlert className="w-3.5 h-3.5 shrink-0" />}
+                      {activeTab === 'trash' && <Trash2 className="w-3.5 h-3.5 shrink-0" />}
+                      <span className="truncate">{activeTab}</span>
                     </span>
                   </div>
-                  <div className="flex items-center gap-0.5" style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
+                  <div className="flex shrink-0 items-center gap-0.5" style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
                     <ToolbarTip label="Yanıtla">
                       <button
                         type="button"
@@ -2318,7 +2467,40 @@ function App() {
                         </button>
                       </ToolbarTip>
                     )}
-                    <div className="mx-1 h-5 w-px bg-white/5" />
+                    <div className="mx-1 hidden h-5 w-px bg-white/5 lg:block" />
+                    <div className="hidden items-center rounded-md border border-white/10 bg-white/[0.03] lg:flex">
+                      <ToolbarTip label={tr.reading.zoomOut}>
+                        <button
+                          type="button"
+                          onClick={() => stepMailZoom(-1)}
+                          className="flex h-7 w-7 items-center justify-center rounded-l-md text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                          aria-label={tr.reading.zoomOut}
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                      </ToolbarTip>
+                      <ToolbarTip label={tr.reading.fitWidthHint}>
+                        <button
+                          type="button"
+                          onClick={() => persistMailZoom("fit")}
+                          className={`flex h-7 min-w-[3.25rem] items-center justify-center gap-1 px-1 text-[11px] font-medium tabular-nums transition-colors ${mailZoom === "fit" ? "text-[var(--app-accent)]" : "text-zinc-300 hover:text-zinc-100"}`}
+                          aria-label={tr.reading.fitWidth}
+                        >
+                          {mailZoom === "fit" && <Maximize2 className="h-3 w-3" />}
+                          {effectiveZoomPct}%
+                        </button>
+                      </ToolbarTip>
+                      <ToolbarTip label={tr.reading.zoomIn}>
+                        <button
+                          type="button"
+                          onClick={() => stepMailZoom(1)}
+                          className="flex h-7 w-7 items-center justify-center rounded-r-md text-zinc-400 hover:bg-white/5 hover:text-zinc-100"
+                          aria-label={tr.reading.zoomIn}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </ToolbarTip>
+                    </div>
                     <ToolbarTip label={tr.reading.settings}>
                       <button
                         type="button"
@@ -2347,22 +2529,42 @@ function App() {
                   </div>
 
                   <div className="space-y-5">
-                    <label className="flex cursor-pointer items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={fitMailToWidth}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setFitMailToWidth(checked);
-                          localStorage.setItem("fursoy_fit_mail_to_width", checked.toString());
-                        }}
-                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-[#09090b] text-blue-500 focus:ring-0 focus:ring-offset-0"
-                      />
-                      <span>
-                        <span className="block text-sm text-zinc-300">{tr.reading.fitWidth}</span>
-                        <span className="mt-1 block text-[11px] leading-relaxed text-zinc-600">{tr.reading.fitWidthHint}</span>
-                      </span>
-                    </label>
+                    <div>
+                      <div className="mb-1 text-sm text-zinc-300">{tr.reading.zoom}</div>
+                      <p className="mb-2 text-[11px] leading-relaxed text-zinc-600">{tr.reading.zoomHint}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="inline-flex items-center rounded-lg border border-white/10 bg-[#09090b]">
+                          <button
+                            type="button"
+                            onClick={() => stepMailZoom(-1)}
+                            className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                            aria-label={tr.reading.zoomOut}
+                            title={tr.reading.zoomOut}
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="min-w-[3rem] text-center text-xs font-medium text-zinc-200 tabular-nums">{effectiveZoomPct}%</span>
+                          <button
+                            type="button"
+                            onClick={() => stepMailZoom(1)}
+                            className="flex h-8 w-8 items-center justify-center text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                            aria-label={tr.reading.zoomIn}
+                            title={tr.reading.zoomIn}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => persistMailZoom("fit")}
+                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${mailZoom === "fit" ? "border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-zinc-100" : "border-white/10 bg-[#09090b] text-zinc-400 hover:text-zinc-200"}`}
+                          title={tr.reading.fitWidthHint}
+                        >
+                          <Maximize2 className="h-3.5 w-3.5" />
+                          {tr.reading.fitWidth}
+                        </button>
+                      </div>
+                    </div>
 
                     <div>
                       <div className="mb-2 text-xs font-medium text-zinc-300">{tr.reading.renderMode}</div>
@@ -2392,9 +2594,9 @@ function App() {
                   </div>
                 </aside>
 
-                <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col" style={{ minHeight: 0 }}>
-                  <div className="mx-auto flex w-full max-w-[1040px] min-w-0 flex-1 flex-col" style={{ minHeight: 0 }}>
-                    <h1 className="text-xl font-bold text-zinc-100 mb-5 shrink-0">{activeMail.subject}</h1>
+                <div className="flex-1 overflow-y-auto p-6 md:p-8">
+                  <div className="mx-auto w-full max-w-[1040px] min-w-0">
+                    <h1 className="text-xl font-bold text-zinc-100 mb-5">{activeMail.subject}</h1>
 
                     {/* Verification Code Banner */}
                     {verificationCode && (
@@ -2473,19 +2675,26 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="flex-1 flex min-w-0 flex-col bg-white rounded-lg overflow-hidden" style={{ minHeight: 0 }}>
+                    <div className="flex min-w-0 flex-col bg-[#0a0a0c] rounded-lg overflow-hidden border border-white/5">
                       {isBodyLoading ? (
-                        <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
+                        <div className="flex min-h-[240px] items-center justify-center text-xs text-zinc-500">
                           {tr.mail.loadingBody}
                         </div>
                       ) : bodyError ? (
-                        <div className="flex-1 flex items-center justify-center text-xs text-red-500 bg-white">
+                        <div className="flex min-h-[240px] items-center justify-center text-xs text-red-400">
                           {bodyError}
                         </div>
                       ) : hasLoadedActiveBody ? (
-                        <EmailHtmlView key={activeMail.id} html={activeMailHtml} fitWidth={fitMailToWidth} onOpenUrl={openExternalMailUrl} />
+                        <EmailHtmlView
+                          key={activeMail.id}
+                          html={activeMailHtml}
+                          zoom={mailZoom}
+                          relayoutKey={`${mailViewMode}|${singlePanelView}|${windowWidth}`}
+                          onFitScaleChange={setMailFitScale}
+                          onOpenUrl={openExternalMailUrl}
+                        />
                       ) : (
-                        <div className="flex-1 flex items-center justify-center text-xs text-zinc-500 bg-white">
+                        <div className="flex min-h-[240px] items-center justify-center text-xs text-zinc-500">
                           {tr.mail.preparingBody}
                         </div>
                       )}

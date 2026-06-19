@@ -45,9 +45,13 @@ export const tr = {
   },
   reading: {
     settings: "Okuma ayarları",
-    fitWidth: "Genişliğe sığdır",
-    fitWidthHint: "Geniş HTML mailleri yatay kaydırma olmadan okuma alanına ölçekler.",
+    fitWidth: "Sığdır",
+    fitWidthHint: "Geniş HTML mailleri yatay kaydırma olmadan okuma alanına otomatik ölçekler.",
     renderMode: "Render modu",
+    zoom: "Yakınlaştırma",
+    zoomHint: "Mail içeriğinin görüntüleme boyutunu ayarlayın. 'Sığdır' panele otomatik oturtur.",
+    zoomIn: "Yakınlaştır",
+    zoomOut: "Uzaklaştır",
   },
   update: {
     title: "Uygulama güncellemeleri",

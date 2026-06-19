@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod gmail;
+mod img_proxy;
 mod notify;
 mod settings;
 mod window_state;
@@ -21,6 +22,31 @@ fn is_background_launch() -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("mailimg", |_app, request, responder| {
+            let uri = request.uri().to_string();
+            tauri::async_runtime::spawn(async move {
+                let response = match img_proxy::fetch_remote_image(uri).await {
+                    Ok((bytes, content_type)) => tauri::http::Response::builder()
+                        .status(200)
+                        .header("Content-Type", content_type)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .header("Cross-Origin-Resource-Policy", "cross-origin")
+                        .header("Cache-Control", "max-age=86400")
+                        .body(bytes)
+                        .unwrap_or_else(|_| {
+                            tauri::http::Response::builder()
+                                .status(500)
+                                .body(Vec::new())
+                                .unwrap()
+                        }),
+                    Err(_) => tauri::http::Response::builder()
+                        .status(404)
+                        .body(Vec::new())
+                        .unwrap(),
+                };
+                responder.respond(response);
+            });
+        })
         .manage(SyncState {
             is_syncing: Mutex::new(false),
             resync_requested: Mutex::new(false),
