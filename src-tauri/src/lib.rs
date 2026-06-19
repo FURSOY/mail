@@ -164,6 +164,7 @@ pub fn run() {
             db::logout,
             gmail::sync_emails,
             gmail::mark_as_read,
+            gmail::mark_as_unread,
             gmail::archive_email,
             gmail::trash_email,
             gmail::move_to_inbox,

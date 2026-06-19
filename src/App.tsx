@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Plus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu, Columns2, PanelLeft, Rows3, Maximize2 } from "lucide-react";
+import { Inbox, Send, Archive, Search, CornerUpLeft, Trash2, RefreshCw, LogOut, X, Minus, Plus, Square, Settings, ShieldAlert, Edit3, AlertTriangle, CheckCircle, XCircle, Copy, RotateCcw, DownloadCloud, Menu, Columns2, PanelLeft, Rows3, Maximize2, Forward, Users, Eye } from "lucide-react";
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { tr } from "./i18n";
@@ -84,21 +84,22 @@ const MAX_INLINE_DATA_URI = 4_000_000;
 const FIXED_LAYOUT_MIN_WIDTH = 460;
 /** In "fit" mode, narrow fixed-layout emails are scaled up to fill the panel, but no more than
  *  this factor so a tiny email isn't blown up absurdly. */
-const MAX_FIT_UPSCALE = 2;
 
 /** Remote email images are fetched through the Rust backend (custom protocol) so that servers
  *  sending restrictive Cross-Origin-Resource-Policy headers don't get blocked (ERR_BLOCKED_BY_RESPONSE).
  *  On Windows, Tauri serves registered custom schemes at http://<scheme>.localhost. */
 const IMAGE_PROXY_BASE = "http://mailimg.localhost/?url=";
 
-/** Route http(s) <img> sources through the backend proxy; strip srcset so it can't bypass it. */
+/** Route http(s) <img> sources through the backend proxy; strip srcset so it can't bypass it.
+ *  Also removes lazy-loading so images load immediately (iframe has no scroll, so they'd never enter viewport). */
 function proxifyEmailImages(html: string): string {
   return html
     .replace(
       /(<img\b[^>]*?\ssrc\s*=\s*)(["'])(https?:\/\/[^"']+)\2/gi,
       (_match, prefix, quote, url) => `${prefix}${quote}${IMAGE_PROXY_BASE}${encodeURIComponent(url)}${quote}`
     )
-    .replace(/\ssrcset\s*=\s*("[^"]*"|'[^']*')/gi, "");
+    .replace(/\ssrcset\s*=\s*("[^"]*"|'[^']*')/gi, "")
+    .replace(/\sloading\s*=\s*["']lazy["']/gi, "");
 }
 const MAX_LABEL_CACHE = 5;
 const STARTUP_NETWORK_DELAY_MS = 5000;
@@ -284,8 +285,10 @@ function ToolbarTip({ label, children }: { label: string; children: ReactNode })
 
 interface EmailSummary {
   id: string;
+  thread_id: string;
   sender: string;
   recipient: string;
+  cc: string;
   subject: string;
   snippet: string;
   date: number;
@@ -311,11 +314,15 @@ function resolveEmailUrl(url: string | null | undefined): string | null {
 }
 
 function findEmailUrl(eventTarget: EventTarget | null): string | null {
-  const node = eventTarget instanceof Element ? eventTarget : null;
-  const link = node?.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
+  // Use duck-typing instead of `instanceof Element` — click targets from a sandboxed
+  // iframe's document are instances of the IFRAME's Element class, not the parent's,
+  // so a cross-frame instanceof check always returns false even for same-origin iframes.
+  if (!eventTarget || typeof (eventTarget as unknown as Record<string, unknown>).closest !== "function") return null;
+  const node = eventTarget as Element;
+  const link = node.closest("a[href], area[href]") as HTMLAnchorElement | HTMLAreaElement | null;
   if (link) return resolveEmailUrl(link.getAttribute("href") || link.href);
 
-  const button = node?.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
+  const button = node.closest("button, input[type='button'], input[type='submit'], [role='button']") as HTMLElement | null;
   const form = button?.closest("form") as HTMLFormElement | null;
   return resolveEmailUrl(
     button?.getAttribute("formaction") ||
@@ -329,14 +336,16 @@ function findEmailUrl(eventTarget: EventTarget | null): string | null {
 function buildEmailSrcDoc(html: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
     <style>
-      html, body { margin: 0; padding: 0; background: #fff; }
+      /* overflow:hidden prevents the iframe's own scrollbar — the outer container scrolls. */
+      html, body { margin: 0; padding: 0; background: #fff; overflow: hidden; }
       * { box-sizing: border-box; }
       .mail-root {
-        display: block; width: 100%; min-width: 0; padding: 16px;
+        display: block; width: 100%; min-width: 0; padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         font-size: 15px; line-height: 1.6; color: #1a1a1a;
       }
-      .mail-root .plain-text { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 720px; }
+      /* Plain-text emails need explicit padding; HTML emails provide their own spacing. */
+      .mail-root > .plain-text { padding: 20px 24px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 720px; }
       img, video { height: auto; }
       a { color: #2563eb; }
       ::selection { background: rgba(59, 130, 246, 0.25); }
@@ -355,6 +364,7 @@ function EmailHtmlView({
   relayoutKey,
   onFitScaleChange,
   onOpenUrl,
+  scrollRef,
 }: {
   html: string;
   zoom: MailZoom;
@@ -362,6 +372,8 @@ function EmailHtmlView({
   relayoutKey?: string | number;
   onFitScaleChange?: (scale: number) => void;
   onOpenUrl: (url: string) => void;
+  /** Outer scroll container — wheel events from the iframe are forwarded here. */
+  scrollRef?: React.RefObject<HTMLElement | null>;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -378,39 +390,60 @@ function EmailHtmlView({
 
     const available = Math.max(1, host.clientWidth);
 
-    // 1. Probe the email's minimum intrinsic width: a fixed-layout email (e.g. a 600px
-    //    newsletter table) keeps its width when squeezed, while a fluid email collapses
-    //    toward its text width. This lets us render fixed emails as a centered card on the
-    //    dark surface instead of stretching a white background across the whole panel.
+    if (zoom === "fit") {
+      // Gmail/Outlook-style fit:
+      //   1. Render the email at the full panel width — the email's own background fills edge-to-edge.
+      //   2. If the content still overflows (a truly wide fixed-layout newsletter), scale the whole
+      //      frame down so nothing is clipped. Never scale UP — a narrow email stays at natural size.
+      frame.style.height = "auto";
+      frame.style.width = `${available}px`;
+
+      const overflowWidth = root.scrollWidth; // > available means content spills out
+      if (overflowWidth > available + 1) {
+        // Content overflows — scale down proportionally, like a zoomed-out desktop view.
+        const fitScale = available / overflowWidth;
+        frame.style.width = `${overflowWidth}px`;
+        const layoutHeight = Math.max(root.scrollHeight, doc.documentElement.scrollHeight, 1);
+        frame.style.height = `${layoutHeight}px`;
+        frame.style.transform = `scale(${fitScale})`;
+        stage.style.width = `${Math.floor(overflowWidth * fitScale)}px`;
+        stage.style.height = `${Math.floor(layoutHeight * fitScale)}px`;
+        onFitScaleChange?.(fitScale);
+      } else {
+        // Email fits or is narrower — render at full panel width, no transform.
+        // Narrow newsletters center themselves via their own margin/align rules inside the iframe.
+        const layoutHeight = Math.max(root.scrollHeight, doc.documentElement.scrollHeight, 1);
+        frame.style.height = `${layoutHeight}px`;
+        frame.style.transform = "none";
+        stage.style.width = `${available}px`;
+        stage.style.height = `${layoutHeight}px`;
+        onFitScaleChange?.(1);
+      }
+      return;
+    }
+
+    // Manual zoom mode: probe intrinsic width then apply CSS transform.
+    // Fluid emails reflow at (available ÷ zoom) so text stays readable at any zoom level;
+    // fixed-layout emails keep their design width and are only scaled.
     frame.style.height = "auto";
     frame.style.width = "0px";
     const minContentWidth = Math.max(root.scrollWidth, 1);
 
     let layoutWidth: number;
     if (minContentWidth >= FIXED_LAYOUT_MIN_WIDTH) {
-      // Fixed-layout email — render at its own design width (centered, dark gutters).
       layoutWidth = minContentWidth;
     } else {
-      // Fluid email — lay it out across the panel (÷ zoom) so it fills the width.
-      const target = zoom === "fit" ? available : Math.max(80, Math.round(available / zoom));
+      const target = Math.max(80, Math.round(available / zoom));
       frame.style.width = `${target}px`;
       layoutWidth = Math.max(root.scrollWidth, target);
     }
 
-    // Fit mode fills the panel width: scale down wide emails, scale up narrow ones (capped),
-    // so an email never sits tiny with empty space beside it.
-    const fitScale = Math.min(MAX_FIT_UPSCALE, available / layoutWidth);
-    const scale = zoom === "fit" ? fitScale : zoom;
-
     frame.style.width = `${layoutWidth}px`;
-    const layoutHeight = Math.max(root.scrollHeight, 1);
+    const layoutHeight = Math.max(root.scrollHeight, doc.documentElement.scrollHeight, 1);
     frame.style.height = `${layoutHeight}px`;
-    frame.style.transform = `scale(${scale})`;
-    // Floor so a rounding excess never spawns a spurious scrollbar that clips content.
-    stage.style.width = `${Math.floor(layoutWidth * scale)}px`;
-    stage.style.height = `${Math.floor(layoutHeight * scale)}px`;
-
-    if (zoom === "fit") onFitScaleChange?.(fitScale);
+    frame.style.transform = `scale(${zoom})`;
+    stage.style.width = `${Math.floor(layoutWidth * zoom)}px`;
+    stage.style.height = `${Math.floor(layoutHeight * zoom)}px`;
   }, [zoom, onFitScaleChange]);
 
   const applyScaleRef = useRef(applyScale);
@@ -426,21 +459,87 @@ function EmailHtmlView({
       const doc = frame.contentDocument;
       if (!doc) return;
 
+      // Navigation-detection fallback: if the iframe navigated away from our email document
+      // (the click handler should have prevented it, but just in case), restore the email
+      // and open the external URL in the system browser.
+      if (!doc.querySelector(".mail-root")) {
+        const navUrl = (() => {
+          try { return frame.contentWindow?.location.href ?? null; } catch { return null; }
+        })();
+        // Restore our email
+        frame.srcdoc = buildEmailSrcDoc(html);
+        // Open the external URL externally if we could read it
+        if (navUrl && navUrl !== "about:blank" && /^https?:/i.test(navUrl)) {
+          onOpenUrl(navUrl);
+        }
+        return;
+      }
+
       const remeasure = () => applyScaleRef.current();
       remeasure();
 
+      // Re-measure after all images load (height changes as images render).
       const images = Array.from(doc.images);
       images.forEach((img) => img.addEventListener("load", remeasure));
 
+      // Re-measure after custom fonts load — font swap changes text reflow and height.
+      doc.fonts?.ready.then(remeasure).catch(() => {});
+
+      // Forward wheel events from the iframe to the outer scroll container.
+      // Wheel events inside an iframe don't propagate to the parent document at all.
+      //
+      // We implement our own easing (lerp toward accumulated target) instead of
+      // scrollBy({ behavior:'smooth' }) because multiple overlapping smooth calls in
+      // WebView2 produce competing animations that stutter and cause perceived lag.
+      let targetScrollTop = -1; // -1 = not yet initialized from current scroll position
+      let smoothRaf = 0;
+      const handleWheel = (e: WheelEvent) => {
+        const outer = scrollRef?.current;
+        if (!outer) return;
+        // Normalise delta to pixels (deltaMode: 0=px, 1=lines, 2=pages).
+        let dy = e.deltaY;
+        const dx = e.deltaX;
+        if (e.deltaMode === 1) { dy *= 40; }
+        else if (e.deltaMode === 2) { dy *= outer.clientHeight; }
+        if (targetScrollTop < 0) targetScrollTop = outer.scrollTop;
+        const maxScroll = outer.scrollHeight - outer.clientHeight;
+        targetScrollTop = Math.max(0, Math.min(maxScroll, targetScrollTop + dy));
+        if (dx !== 0) outer.scrollLeft += dx;
+        if (!smoothRaf) {
+          const step = () => {
+            const diff = targetScrollTop - outer.scrollTop;
+            if (Math.abs(diff) < 0.5) {
+              outer.scrollTop = targetScrollTop;
+              smoothRaf = 0;
+              return;
+            }
+            // Ease-out: close 20 % of remaining distance each frame.
+            outer.scrollTop += diff * 0.2;
+            smoothRaf = requestAnimationFrame(step);
+          };
+          smoothRaf = requestAnimationFrame(step);
+        }
+      };
+      doc.addEventListener("wheel", handleWheel, { passive: true });
+
+      // Intercept clicks on links/buttons before the iframe's own navigation handler.
+      // NOTE: event.target instanceof Element fails for cross-frame elements even with
+      // allow-same-origin; findEmailUrl already uses duck-typing to handle this.
       const handleClick = (event: Event) => {
         const url = findEmailUrl(event.target);
+        // Block default on any anchor/button — the iframe must never navigate itself.
+        // Check both the resolved URL and the DOM ancestry so even unresolvable links
+        // (javascript:, empty href, etc.) don't trigger iframe navigation.
+        const isInteractive = url !== null ||
+          !!(event.target as Element | null)?.closest?.("a, area, button, [role='button']");
+        if (isInteractive) event.preventDefault();
         if (!url) return;
-        event.preventDefault();
         event.stopPropagation();
         onOpenUrl(url);
       };
       const handleSubmit = (event: Event) => {
-        const form = event.target instanceof HTMLFormElement ? event.target : null;
+        const node = event.target as Element | null;
+        const form = node?.closest?.("form") as HTMLFormElement | null;
         const url = resolveEmailUrl(form?.getAttribute("action"));
         if (!url) return;
         event.preventDefault();
@@ -451,7 +550,9 @@ function EmailHtmlView({
       doc.addEventListener("submit", handleSubmit, true);
 
       innerCleanup = () => {
+        cancelAnimationFrame(smoothRaf);
         images.forEach((img) => img.removeEventListener("load", remeasure));
+        doc.removeEventListener("wheel", handleWheel);
         doc.removeEventListener("click", handleClick, true);
         doc.removeEventListener("submit", handleSubmit, true);
       };
@@ -464,39 +565,37 @@ function EmailHtmlView({
       frame.removeEventListener("load", handleLoad);
       innerCleanup?.();
     };
-  }, [html, onOpenUrl]);
+  }, [html, onOpenUrl, scrollRef]);
 
-  // Re-scale when zoom changes or the panel resizes.
+  // Re-scale when zoom/relayoutKey changes or the panel resizes.
+  // Merged into one effect so ResizeObserver and relayoutKey changes don't schedule
+  // competing rAFs. The 260ms settle-timer is reset on every resize event so it only
+  // fires once the panel has stopped moving (CSS transitions are ~200ms).
   useEffect(() => {
-    let frame = 0;
+    let raf = 0;
+    let timer = 0;
     const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => applyScale());
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+      raf = requestAnimationFrame(() => {
+        applyScale();
+        timer = window.setTimeout(() => applyScale(), 260);
+      });
     };
     schedule();
     const host = hostRef.current;
-    if (!host) return () => cancelAnimationFrame(frame);
+    if (!host) return () => { cancelAnimationFrame(raf); clearTimeout(timer); };
     const resizeObserver = new ResizeObserver(schedule);
     resizeObserver.observe(host);
     return () => {
-      cancelAnimationFrame(frame);
-      resizeObserver.disconnect();
-    };
-  }, [applyScale]);
-
-  // Layout-mode/window changes can settle after a CSS transition, so recompute
-  // both immediately and once the transition has had time to finish.
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => applyScale());
-    const timer = window.setTimeout(() => applyScale(), 260);
-    return () => {
       cancelAnimationFrame(raf);
-      window.clearTimeout(timer);
+      clearTimeout(timer);
+      resizeObserver.disconnect();
     };
   }, [applyScale, relayoutKey]);
 
   return (
-    <div ref={hostRef} className="relative w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain bg-[#0a0a0c] select-text">
+    <div ref={hostRef} className="relative w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-contain bg-white select-text">
       <div ref={stageRef} className="relative mx-auto">
         <iframe
           ref={frameRef}
@@ -614,15 +713,18 @@ function App() {
   const [userInfo, setUserInfo] = useState<AuthInfo | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showReply, setShowReply] = useState(false);
+  const [replyMode, setReplyMode] = useState<"reply" | "reply-all">("reply");
   const [replyText, setReplyText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [readingToolsOpen, setReadingToolsOpen] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [composeHtmlAppend, setComposeHtmlAppend] = useState("");
   const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'error' | 'success' | 'info' }[]>([]);
   const [verificationCopyState, setVerificationCopyState] = useState<"idle" | "copied">("idle");
   const [inboxUnread, setInboxUnread] = useState(0);
@@ -638,6 +740,7 @@ function App() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const mailScrollRef = useRef<HTMLDivElement>(null);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recentNotificationsRef = useRef<Record<string, string>>({});
   const notifiedUpdateVersionRef = useRef<string | null>(null);
@@ -1465,34 +1568,55 @@ function App() {
     }
   };
 
-  const handlePermanentDelete = async (emailId: string) => {
+  const handlePermanentDelete = (emailId: string) => {
     if (!accessToken) return;
-    if (!window.confirm("Bu e-posta kalıcı olarak silinsin mi? Bu işlem geri alınamaz.")) return;
-    setEmails(prev => prev.filter(e => e.id !== emailId));
-    setSelectedMail(null);
-    try {
-      await invoke("permanently_delete", { accessToken, messageId: emailId });
-      showToast("Kalıcı olarak silindi", "success");
-    } catch (e) {
-      showToast("Silme başarısız", "error");
-      loadEmails(activeTabRef.current);
-    }
+    setConfirmModal({
+      message: "Bu e-posta kalıcı olarak silinsin mi? Bu işlem geri alınamaz.",
+      onConfirm: async () => {
+        setEmails(prev => prev.filter(e => e.id !== emailId));
+        setSelectedMail(null);
+        try {
+          await invoke("permanently_delete", { accessToken, messageId: emailId });
+          showToast("Kalıcı olarak silindi", "success");
+        } catch (e) {
+          showToast("Silme başarısız", "error");
+          loadEmails(activeTabRef.current);
+        }
+      },
+    });
   };
 
   const handleReply = async () => {
     if (!accessToken || !activeMail || !replyText.trim()) return;
     setIsSending(true);
     try {
-      // Extract email address from "Name <email>" format
-      const senderMatch = activeMail.sender.match(/<([^>]+)>/);
-      const to = senderMatch ? senderMatch[1] : activeMail.sender;
+      const extractAddress = (raw: string) => {
+        const m = raw.match(/<([^>]+)>/);
+        return m ? m[1].trim() : raw.trim();
+      };
+
+      const senderAddr = extractAddress(activeMail.sender);
+
+      let toField: string;
+      if (replyMode === "reply-all") {
+        const ccAddrs = activeMail.cc
+          .split(",")
+          .map(a => extractAddress(a.trim()))
+          .filter(a => a.length > 0);
+        toField = [senderAddr, ...ccAddrs].join(", ");
+      } else {
+        toField = senderAddr;
+      }
+
+      const quotedDate = formatDateFull(activeMail.date);
+      const quotedHtml = `<br/><br/><div style="border-left:3px solid #ccc;padding-left:12px;color:#888;margin-top:8px"><div style="margin-bottom:6px;font-size:12px">On ${quotedDate}, <b>${activeMail.sender}</b> wrote:</div>${selectedMailBody || activeMail.snippet}</div>`;
 
       await invoke("send_reply", {
         accessToken,
-        to,
+        to: toField,
         subject: activeMail.subject,
-        body: replyText.replace(/\n/g, "<br/>"),
-        threadId: activeMail.id,
+        body: replyText.replace(/\n/g, "<br/>") + quotedHtml,
+        threadId: activeMail.thread_id || activeMail.id,
         messageId: activeMail.id,
       });
       setReplyText("");
@@ -1507,20 +1631,50 @@ function App() {
     if (!accessToken || !composeTo.trim() || !composeSubject.trim()) return;
     setIsSending(true);
     try {
+      const body = composeBody.replace(/\n/g, "<br/>") + composeHtmlAppend;
       await invoke("send_email", {
         accessToken,
         to: composeTo,
         subject: composeSubject,
-        body: composeBody.replace(/\n/g, "<br/>"),
+        body,
       });
       setShowCompose(false);
       setComposeTo("");
       setComposeSubject("");
       setComposeBody("");
+      setComposeHtmlAppend("");
     } catch (e) {
       showToast("Gönderim başarısız", "error");
     }
     setIsSending(false);
+  };
+
+  const handleMarkAsUnread = async (emailId: string) => {
+    if (!accessToken) return;
+    recentlyReadRef.current.delete(emailId);
+    setEmails(prev => prev.map(m => m.id === emailId ? { ...m, unread: true } : m));
+    try {
+      await invoke("mark_as_unread", { accessToken, messageId: emailId });
+      await refreshUnreadCount();
+    } catch (e) {
+      showToast("İşlem başarısız", "error");
+      loadEmails(activeTabRef.current);
+    }
+  };
+
+  const handleForward = (mail: EmailSummary) => {
+    const fwdHeader = `<br/><br/><div style="border-top:1px solid #eee;padding-top:12px;color:#555;font-size:13px"><b>---------- İletilen Mesaj ----------</b><br/>Kimden: ${mail.sender}<br/>Konu: ${mail.subject}<br/>Tarih: ${formatDateFull(mail.date)}<br/><br/></div>`;
+    setComposeTo("");
+    setComposeSubject(`Fwd: ${mail.subject.replace(/^(Fwd:\s*)+/i, "")}`);
+    setComposeBody("");
+    setComposeHtmlAppend(fwdHeader + (selectedMailBody || mail.snippet));
+    setShowCompose(true);
+  };
+
+  const openReply = (mode: "reply" | "reply-all") => {
+    setReplyMode(mode);
+    setShowReply(true);
+    setTimeout(() => replyRef.current?.focus(), 100);
   };
 
   const activeMail = emails.find(m => m.id === selectedMail);
@@ -1580,6 +1734,8 @@ function App() {
     setSelectedMailBodyId(null);
     setBodyError(null);
     setIsBodyLoading(false);
+    setReadingToolsOpen(false);
+    if (mailScrollRef.current) mailScrollRef.current.scrollTop = 0;
 
     if (!selectedMail) return;
 
@@ -1828,8 +1984,8 @@ function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="w-full max-w-lg bg-[#111113] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                <h3 className="text-sm font-semibold text-zinc-200">{tr.compose.title}</h3>
-                <button onClick={() => setShowCompose(false)} className="p-1 rounded hover:bg-white/10 text-zinc-400"><X className="w-4 h-4" /></button>
+                <h3 className="text-sm font-semibold text-zinc-200">{composeHtmlAppend ? "İlet" : tr.compose.title}</h3>
+                <button onClick={() => { setShowCompose(false); setComposeHtmlAppend(""); }} className="p-1 rounded hover:bg-white/10 text-zinc-400"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-4 space-y-3 flex-1">
                 <input value={composeTo} onChange={e => setComposeTo(e.target.value)} placeholder={tr.compose.to} className={ui.input} />
@@ -1837,7 +1993,7 @@ function App() {
                 <textarea value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder={tr.compose.body} className={`${ui.input} resize-none min-h-[200px]`} />
               </div>
               <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-                <button onClick={() => setShowCompose(false)} className="text-xs text-zinc-500 hover:text-zinc-300">{tr.compose.discard}</button>
+                <button onClick={() => { setShowCompose(false); setComposeHtmlAppend(""); }} className="text-xs text-zinc-500 hover:text-zinc-300">{tr.compose.discard}</button>
                 <button onClick={handleComposeSend} disabled={!composeTo.trim() || !composeSubject.trim() || isSending} className="px-5 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2">
                   {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                   {isSending ? tr.compose.sending : tr.compose.send}
@@ -1848,8 +2004,11 @@ function App() {
         )}
 
         {/* MAIN CONTENT AREA */}
-        {activeTab === 'settings' ? (
-          <section className="flex-1 overflow-y-auto bg-[#0a0a0c] p-8">
+        {/* Settings panel — always in DOM so re-opens skip fresh mount */}
+        <section
+          className="flex-1 overflow-y-scroll overscroll-contain bg-[#0a0a0c] p-8"
+          style={{ contain: "layout paint", display: activeTab === 'settings' ? undefined : 'none' }}
+        >
             <div className="max-w-2xl mx-auto">
               <h2 className={`${typography.pageTitle} mb-6 flex items-center gap-2`}>
                 {usesOverlaySidebar && (
@@ -2252,8 +2411,8 @@ function App() {
                 </div>
               </div>
             </div>
-          </section>
-        ) : (
+        </section>
+        {activeTab !== 'settings' && (
           <>
             {/* MAIL LIST */}
             <section className={mailListClassName}>
@@ -2417,10 +2576,39 @@ function App() {
                     <ToolbarTip label="Yanıtla">
                       <button
                         type="button"
-                        onClick={() => { setShowReply(!showReply); setTimeout(() => replyRef.current?.focus(), 100); }}
-                        className={`p-2 rounded-md hover:bg-white/5 transition-colors ${showReply ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
+                        onClick={() => openReply("reply")}
+                        className={`p-2 rounded-md hover:bg-white/5 transition-colors ${showReply && replyMode === "reply" ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
                       >
                         <CornerUpLeft className="w-4 h-4" />
+                      </button>
+                    </ToolbarTip>
+                    {activeMail.cc && (
+                      <ToolbarTip label="Tümünü yanıtla">
+                        <button
+                          type="button"
+                          onClick={() => openReply("reply-all")}
+                          className={`p-2 rounded-md hover:bg-white/5 transition-colors ${showReply && replyMode === "reply-all" ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400 hover:text-zinc-200'}`}
+                        >
+                          <Users className="w-4 h-4" />
+                        </button>
+                      </ToolbarTip>
+                    )}
+                    <ToolbarTip label="İlet">
+                      <button
+                        type="button"
+                        onClick={() => handleForward(activeMail)}
+                        className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-zinc-200 transition-colors"
+                      >
+                        <Forward className="w-4 h-4" />
+                      </button>
+                    </ToolbarTip>
+                    <ToolbarTip label="Okunmadı olarak işaretle">
+                      <button
+                        type="button"
+                        onClick={() => handleMarkAsUnread(activeMail.id)}
+                        className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-zinc-200 transition-colors"
+                      >
+                        <Eye className="w-4 h-4" />
                       </button>
                     </ToolbarTip>
                     {showRestoreBtn && (
@@ -2594,7 +2782,7 @@ function App() {
                   </div>
                 </aside>
 
-                <div className="flex-1 overflow-y-auto p-6 md:p-8">
+                <div ref={mailScrollRef} className="flex-1 overflow-y-scroll overscroll-contain p-6 md:p-8">
                   <div className="mx-auto w-full max-w-[1040px] min-w-0">
                     <h1 className="text-xl font-bold text-zinc-100 mb-5">{activeMail.subject}</h1>
 
@@ -2635,6 +2823,11 @@ function App() {
                           <div className="text-[11px] text-zinc-600 mt-0.5">
                             {activeTab === 'sent' ? 'from me' : 'to me'} · {formatDateFull(activeMail.date)}
                           </div>
+                          {activeMail.cc && (
+                            <div className="text-[11px] text-zinc-600 mt-0.5">
+                              <span className="text-zinc-700">CC:</span> {activeMail.cc}
+                            </div>
+                          )}
                         </div>
                       </div>
                       {/* Mobile action buttons */}
@@ -2675,7 +2868,7 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="flex min-w-0 flex-col bg-[#0a0a0c] rounded-lg overflow-hidden border border-white/5">
+                    <div className="flex min-w-0 flex-col bg-white rounded-lg overflow-hidden border border-black/10">
                       {isBodyLoading ? (
                         <div className="flex min-h-[240px] items-center justify-center text-xs text-zinc-500">
                           {tr.mail.loadingBody}
@@ -2692,6 +2885,7 @@ function App() {
                           relayoutKey={`${mailViewMode}|${singlePanelView}|${windowWidth}`}
                           onFitScaleChange={setMailFitScale}
                           onOpenUrl={openExternalMailUrl}
+                          scrollRef={mailScrollRef}
                         />
                       ) : (
                         <div className="flex min-h-[240px] items-center justify-center text-xs text-zinc-500">
@@ -2704,9 +2898,17 @@ function App() {
                     {showReply && (
                       <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] overflow-hidden">
                         <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
-                          <CornerUpLeft className="w-3.5 h-3.5 text-zinc-500" />
-                          <span className="text-xs text-zinc-400">
-                            {tr.mail.replyTo} <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</span>
+                          {replyMode === "reply-all" ? (
+                            <Users className="w-3.5 h-3.5 text-zinc-500" />
+                          ) : (
+                            <CornerUpLeft className="w-3.5 h-3.5 text-zinc-500" />
+                          )}
+                          <span className="text-xs text-zinc-400 truncate">
+                            {replyMode === "reply-all" ? (
+                              <>Tümüne yanıtla: <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}{activeMail.cc ? `, ${activeMail.cc}` : ""}</span></>
+                            ) : (
+                              <>{tr.mail.replyTo} <span className="text-zinc-300">{activeMail.sender.split('<')[0].replace(/"/g, '').trim()}</span></>
+                            )}
                           </span>
                         </div>
                         <textarea
@@ -2716,6 +2918,9 @@ function App() {
                           placeholder={tr.mail.writeReply}
                           className="w-full bg-transparent p-4 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none resize-none min-h-[120px] select-text"
                         />
+                        <div className="px-3 py-2 border-t border-white/[0.04] text-[11px] text-zinc-700 italic truncate">
+                          — {activeMail.sender.split('<')[0].replace(/"/g, '').trim()}, {formatDateFull(activeMail.date)}
+                        </div>
                         <div className="px-4 py-2.5 border-t border-white/5 flex items-center justify-between">
                           <button
                             onClick={() => { setShowReply(false); setReplyText(""); }}
@@ -2765,6 +2970,37 @@ function App() {
           >
             Giriş Yap
           </button>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal(null)}>
+          <div
+            className="w-full max-w-sm bg-[#111113] border border-white/10 rounded-xl shadow-2xl p-6 mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-5">
+              <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5 text-red-400" />
+              </div>
+              <p className="text-sm text-zinc-200 leading-relaxed">{confirmModal.message}</p>
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                Sil
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

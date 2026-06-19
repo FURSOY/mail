@@ -313,6 +313,8 @@ struct MessageId {
 #[derive(Deserialize, Debug)]
 struct MessageDetail {
     id: String,
+    #[serde(rename = "threadId")]
+    thread_id: Option<String>,
     snippet: String,
     payload: Payload,
     #[serde(rename = "internalDate")]
@@ -367,6 +369,7 @@ fn determine_label(label_ids: &[String]) -> String {
 fn parse_message_detail(detail: MessageDetail) -> Email {
     let mut sender = "Unknown Sender".to_string();
     let mut recipient = String::new();
+    let mut cc = String::new();
     let mut subject = "No Subject".to_string();
 
     for header in &detail.payload.headers {
@@ -374,6 +377,8 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
             sender = header.value.clone();
         } else if header.name.eq_ignore_ascii_case("to") {
             recipient = header.value.clone();
+        } else if header.name.eq_ignore_ascii_case("cc") {
+            cc = header.value.clone();
         } else if header.name.eq_ignore_ascii_case("subject") {
             subject = header.value.clone();
         }
@@ -422,8 +427,10 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
 
     Email {
         id: detail.id,
+        thread_id: detail.thread_id.unwrap_or_default(),
         sender,
         recipient,
+        cc,
         subject,
         snippet: detail.snippet,
         body_html,
@@ -815,6 +822,34 @@ pub async fn mark_as_read(
     );
     let body = serde_json::json!({
         "removeLabelIds": ["UNREAD"]
+    });
+
+    let _res = client
+        .post(&url)
+        .bearer_auth(&access_token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn mark_as_unread(
+    app: AppHandle,
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
+    crate::db::mark_email_as_unread_local(&app, &message_id)?;
+
+    let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/modify",
+        message_id
+    );
+    let body = serde_json::json!({
+        "addLabelIds": ["UNREAD"]
     });
 
     let _res = client

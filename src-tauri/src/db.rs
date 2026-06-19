@@ -43,8 +43,10 @@ fn delete_tokens_from_keyring() {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Email {
     pub id: String,
+    pub thread_id: String,
     pub sender: String,
     pub recipient: String,
+    pub cc: String,
     pub subject: String,
     pub snippet: String,
     pub body_html: String,
@@ -56,8 +58,10 @@ pub struct Email {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmailSummary {
     pub id: String,
+    pub thread_id: String,
     pub sender: String,
     pub recipient: String,
+    pub cc: String,
     pub subject: String,
     pub snippet: String,
     pub date: i64,
@@ -88,8 +92,10 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS emails (
             id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL DEFAULT '',
             sender TEXT NOT NULL,
             recipient TEXT NOT NULL DEFAULT '',
+            cc TEXT NOT NULL DEFAULT '',
             subject TEXT NOT NULL,
             snippet TEXT NOT NULL,
             body_html TEXT NOT NULL,
@@ -125,6 +131,30 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
         )?;
     }
 
+    let has_thread_id: bool = conn
+        .prepare("SELECT COUNT(*) FROM pragma_table_info('emails') WHERE name='thread_id'")
+        .and_then(|mut s| s.query_row([], |r| r.get::<_, i64>(0)))
+        .map(|c| c > 0)
+        .unwrap_or(false);
+    if !has_thread_id {
+        conn.execute(
+            "ALTER TABLE emails ADD COLUMN thread_id TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+
+    let has_cc: bool = conn
+        .prepare("SELECT COUNT(*) FROM pragma_table_info('emails') WHERE name='cc'")
+        .and_then(|mut s| s.query_row([], |r| r.get::<_, i64>(0)))
+        .map(|c| c > 0)
+        .unwrap_or(false);
+    if !has_cc {
+        conn.execute(
+            "ALTER TABLE emails ADD COLUMN cc TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS auth (
             id INTEGER PRIMARY KEY,
@@ -154,11 +184,13 @@ pub fn upsert_emails(app: &AppHandle, emails: Vec<Email>) -> Result<()> {
 
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO emails (id, sender, recipient, subject, snippet, body_html, date, unread, label)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO emails (id, thread_id, sender, recipient, cc, subject, snippet, body_html, date, unread, label)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
+                thread_id=excluded.thread_id,
                 sender=excluded.sender,
                 recipient=excluded.recipient,
+                cc=excluded.cc,
                 subject=excluded.subject,
                 snippet=excluded.snippet,
                 body_html=excluded.body_html,
@@ -170,8 +202,10 @@ pub fn upsert_emails(app: &AppHandle, emails: Vec<Email>) -> Result<()> {
         for email in emails {
             stmt.execute(params![
                 email.id,
+                email.thread_id,
                 email.sender,
                 email.recipient,
+                email.cc,
                 email.subject,
                 email.snippet,
                 email.body_html,
@@ -192,20 +226,22 @@ pub fn get_emails_by_label(app: tauri::AppHandle, label: String) -> Result<Vec<E
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, sender, recipient, subject, snippet, date, unread, label FROM emails WHERE label = ?1 ORDER BY date DESC")
+        .prepare("SELECT id, thread_id, sender, recipient, cc, subject, snippet, date, unread, label FROM emails WHERE label = ?1 ORDER BY date DESC")
         .map_err(|e| e.to_string())?;
 
     let email_iter = stmt
         .query_map(params![label], |row| {
             Ok(EmailSummary {
                 id: row.get(0)?,
-                sender: row.get(1)?,
-                recipient: row.get(2)?,
-                subject: row.get(3)?,
-                snippet: row.get(4)?,
-                date: row.get(5)?,
-                unread: row.get(6)?,
-                label: row.get(7)?,
+                thread_id: row.get(1)?,
+                sender: row.get(2)?,
+                recipient: row.get(3)?,
+                cc: row.get(4)?,
+                subject: row.get(5)?,
+                snippet: row.get(6)?,
+                date: row.get(7)?,
+                unread: row.get(8)?,
+                label: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -226,20 +262,22 @@ pub fn get_local_emails(app: tauri::AppHandle) -> Result<Vec<EmailSummary>, Stri
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, sender, recipient, subject, snippet, date, unread, label FROM emails ORDER BY date DESC")
+        .prepare("SELECT id, thread_id, sender, recipient, cc, subject, snippet, date, unread, label FROM emails ORDER BY date DESC")
         .map_err(|e| e.to_string())?;
 
     let email_iter = stmt
         .query_map([], |row| {
             Ok(EmailSummary {
                 id: row.get(0)?,
-                sender: row.get(1)?,
-                recipient: row.get(2)?,
-                subject: row.get(3)?,
-                snippet: row.get(4)?,
-                date: row.get(5)?,
-                unread: row.get(6)?,
-                label: row.get(7)?,
+                thread_id: row.get(1)?,
+                sender: row.get(2)?,
+                recipient: row.get(3)?,
+                cc: row.get(4)?,
+                subject: row.get(5)?,
+                snippet: row.get(6)?,
+                date: row.get(7)?,
+                unread: row.get(8)?,
+                label: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -272,6 +310,16 @@ pub fn mark_email_as_read_local(app: &AppHandle, id: &str) -> Result<(), String>
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute("UPDATE emails SET unread = 0 WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+pub fn mark_email_as_unread_local(app: &AppHandle, id: &str) -> Result<(), String> {
+    let db_path = get_db_path(app);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    conn.execute("UPDATE emails SET unread = 1 WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
 
     Ok(())
