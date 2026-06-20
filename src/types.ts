@@ -26,6 +26,13 @@ export interface EmailSummary {
   account_id: string;
 }
 
+export interface ThreadGroup {
+  latestEmail: EmailSummary;
+  hasUnread: boolean;
+  count: number;
+  participants: string[];
+}
+
 export interface MailDebugMetrics {
   openedCount: number;
   lastBodyBytes: number;

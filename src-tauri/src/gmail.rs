@@ -762,6 +762,8 @@ fn build_raw_mime(headers: &[(&str, String)], body: &str) -> String {
 
 #[tauri::command]
 pub async fn send_reply(
+    app: tauri::AppHandle,
+    account_id: String,
     access_token: String,
     to: String,
     subject: String,
@@ -804,6 +806,21 @@ pub async fn send_reply(
             "Gmail send error: {}",
             res.text().await.unwrap_or_default()
         ));
+    }
+
+    // Parse the response to get the sent message ID, then fetch and save to local DB
+    let sent_msg: serde_json::Value = res.json().await.unwrap_or_default();
+    let sent_id = sent_msg["id"].as_str().unwrap_or("").to_string();
+    if !sent_id.is_empty() {
+        if let Ok(detail) = fetch_message_detail(&client, &access_token, &sent_id).await {
+            let email = parse_message_detail(detail);
+            let app_clone = app.clone();
+            let acct = account_id.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::db::upsert_emails(&app_clone, &acct, vec![email])
+            })
+            .await;
+        }
     }
 
     Ok(())

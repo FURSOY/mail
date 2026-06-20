@@ -159,6 +159,7 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
     )?;
 
     // Migration: add missing columns to emails
+    let mut thread_id_was_missing = false;
     for (col, ddl) in [
         ("label", "ALTER TABLE emails ADD COLUMN label TEXT NOT NULL DEFAULT 'inbox'"),
         ("recipient", "ALTER TABLE emails ADD COLUMN recipient TEXT NOT NULL DEFAULT ''"),
@@ -176,6 +177,27 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
             .unwrap_or(false);
         if !exists {
             conn.execute(ddl, [])?;
+            if col == "thread_id" {
+                thread_id_was_missing = true;
+            }
+        }
+    }
+
+    // If thread_id column was just added, all existing rows have thread_id=''.
+    // Also handle the case where emails exist with empty thread_ids from old syncs.
+    // Reset sync_state so the next startup does a full re-sync and re-fetches thread_ids.
+    if thread_id_was_missing {
+        conn.execute("DELETE FROM sync_state", []).ok();
+    } else {
+        let empty_thread_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM emails WHERE thread_id = ''",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if empty_thread_count > 0 {
+            conn.execute("DELETE FROM sync_state", []).ok();
         }
     }
 
@@ -758,7 +780,6 @@ pub fn set_history_id(app: &AppHandle, account_id: &str, history_id: &str) -> Re
 pub fn get_thread_emails(
     app: tauri::AppHandle,
     thread_id: String,
-    account_id: String,
 ) -> Result<Vec<EmailSummary>, String> {
     if thread_id.is_empty() {
         return Ok(vec![]);
@@ -766,11 +787,11 @@ pub fn get_thread_emails(
     let db_path = get_db_path(&app);
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let sql = format!(
-        "SELECT {SUMMARY_COLS} FROM emails WHERE thread_id = ?1 AND account_id = ?2 ORDER BY date ASC"
+        "SELECT {SUMMARY_COLS} FROM emails WHERE thread_id = ?1 ORDER BY date ASC"
     );
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let rows: Vec<EmailSummary> = stmt
-        .query_map(params![thread_id, account_id], map_summary_row)
+        .query_map(params![thread_id], map_summary_row)
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();

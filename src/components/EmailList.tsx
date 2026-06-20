@@ -1,12 +1,12 @@
 import { Search, X, RefreshCw, Settings, Columns2, PanelLeft, Rows3, Menu } from "lucide-react";
 import { tr } from "../i18n";
-import type { Account, EmailSummary, MailViewPreference } from "../types";
+import type { Account, EmailSummary, ThreadGroup, MailViewPreference } from "../types";
 import { formatDate } from "../utils";
 import { ToolbarTip } from "./ToolbarTip";
 
 interface EmailListProps {
   className: string;
-  displayEmails: EmailSummary[];
+  threadGroups: ThreadGroup[];
   selectedMail: string | null;
   onMailClick: (mail: EmailSummary) => void;
   isUserSyncing: boolean;
@@ -26,7 +26,7 @@ interface EmailListProps {
 }
 
 export function EmailList({
-  className, displayEmails, selectedMail, onMailClick,
+  className, threadGroups, selectedMail, onMailClick,
   isUserSyncing, isBackgroundSyncing,
   searchQuery, setSearchQuery, searchInputRef,
   activeTab, usesOverlaySidebar, onMenuOpen,
@@ -35,13 +35,6 @@ export function EmailList({
   accounts, activeAccountId,
 }: EmailListProps) {
   const showAccountBadge = activeAccountId === null && (accounts?.length ?? 0) > 1;
-
-  const threadCountMap: Record<string, number> = {};
-  for (const mail of displayEmails) {
-    if (mail.thread_id) {
-      threadCountMap[mail.thread_id] = (threadCountMap[mail.thread_id] || 0) + 1;
-    }
-  }
 
   return (
     <section className={className}>
@@ -52,8 +45,6 @@ export function EmailList({
               type="button"
               onClick={onMenuOpen}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-white/10 hover:text-zinc-200"
-              aria-label="Menuyu ac"
-              title="Menuyu ac"
             >
               <Menu className="h-4 w-4" />
             </button>
@@ -132,9 +123,9 @@ export function EmailList({
         </div>
       </div>
 
-      {/* List */}
+      {/* Thread List */}
       <div className="flex-1 overflow-y-auto">
-        {displayEmails.length === 0 && !isUserSyncing && !isBackgroundSyncing && (
+        {threadGroups.length === 0 && !isUserSyncing && !isBackgroundSyncing && (
           <div className="p-8 text-center text-zinc-600 text-xs">
             {searchQuery
               ? tr.mail.searchEmpty
@@ -143,64 +134,82 @@ export function EmailList({
               : tr.mail.emptyFolder}
           </div>
         )}
-        {displayEmails.map((mail) => (
-          <div
-            key={mail.id}
-            onClick={() => onMailClick(mail)}
-            className={`px-4 py-[var(--mail-row-py)] border-b border-white/[0.03] cursor-pointer transition-all duration-200 relative ${
-              selectedMail === mail.id
-                ? "bg-[var(--app-accent-soft)] border-l-2 border-l-[var(--app-accent)]"
-                : "hover:bg-white/[0.02] border-l-2 border-l-transparent"
-            }`}
-          >
-            {mail.unread && (
-              <div className="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500" />
-            )}
-            <div className="flex justify-between items-baseline mb-0.5 gap-2 min-w-0">
-              <span
-                className={`min-w-0 truncate text-xs ${mail.unread ? "font-semibold text-zinc-100" : "text-zinc-400"}`}
-                title={mail.label === "sent" ? mail.recipient : mail.sender}
-              >
-                {mail.label === "sent"
-                  ? `To: ${(mail.recipient || "").split("<")[0].replace(/"/g, "").trim() || mail.recipient}`
-                  : mail.sender.split("<")[0].replace(/"/g, "").trim()}
-              </span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {mail.thread_id && (threadCountMap[mail.thread_id] ?? 1) > 1 && (
-                  <span className="text-[10px] text-zinc-700 tabular-nums">
-                    {threadCountMap[mail.thread_id]}
-                  </span>
-                )}
-                <span className="text-[10px] text-zinc-600">{formatDate(mail.date)}</span>
-              </div>
-            </div>
-            <h3
-              className={`min-w-0 truncate text-xs ${mail.unread ? "text-zinc-200 font-medium" : "text-zinc-500"}`}
-              title={mail.subject}
+        {threadGroups.map((group) => {
+          const mail = group.latestEmail;
+          const isSelected = selectedMail === mail.id;
+          const senderDisplay = activeTab === "sent"
+            ? `To: ${(mail.recipient || "").split("<")[0].replace(/"/g, "").trim() || mail.recipient}`
+            : group.participants.slice(0, 3).join(", ");
+          const snippetPrefix = group.count > 1
+            ? `${mail.sender.split("<")[0].replace(/"/g, "").trim()}: `
+            : "";
+
+          return (
+            <div
+              key={mail.thread_id || mail.id}
+              onClick={() => onMailClick(mail)}
+              className={`px-4 py-[var(--mail-row-py)] border-b border-white/[0.03] cursor-pointer transition-all duration-200 relative ${
+                isSelected
+                  ? "bg-[var(--app-accent-soft)] border-l-2 border-l-[var(--app-accent)]"
+                  : "hover:bg-white/[0.02] border-l-2 border-l-transparent"
+              }`}
             >
-              {mail.subject}
-            </h3>
-            <p className="mt-0.5 min-w-0 truncate text-[11px] text-zinc-600" title={mail.snippet}>
-              {mail.snippet}
-            </p>
-            {showAccountBadge && (() => {
-              const acc = accounts?.find(a => a.id === mail.account_id);
-              if (!acc) return null;
-              return (
-                <div className="mt-1 flex items-center gap-1">
-                  {acc.picture ? (
-                    <img src={acc.picture} className="w-3.5 h-3.5 rounded-full shrink-0" alt="" />
-                  ) : (
-                    <div className="w-3.5 h-3.5 rounded-full bg-zinc-700 flex items-center justify-center text-[8px] font-bold text-zinc-400 shrink-0">
-                      {acc.email[0]?.toUpperCase()}
-                    </div>
+              {/* Unread dot */}
+              {group.hasUnread && (
+                <div className="absolute left-1 top-4 w-1.5 h-1.5 rounded-full bg-blue-500" />
+              )}
+
+              {/* Row 1: participants + count + date */}
+              <div className="flex justify-between items-baseline mb-0.5 gap-2 min-w-0">
+                <span
+                  className={`min-w-0 truncate text-xs ${group.hasUnread ? "font-semibold text-zinc-100" : "text-zinc-400"}`}
+                  title={senderDisplay}
+                >
+                  {senderDisplay}
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {group.count > 1 && (
+                    <span className="text-[10px] text-zinc-600 tabular-nums">
+                      {group.count}
+                    </span>
                   )}
-                  <span className="text-[10px] text-zinc-600 truncate">{acc.email}</span>
+                  <span className="text-[10px] text-zinc-600">{formatDate(mail.date)}</span>
                 </div>
-              );
-            })()}
-          </div>
-        ))}
+              </div>
+
+              {/* Row 2: subject */}
+              <h3
+                className={`min-w-0 truncate text-xs ${group.hasUnread ? "text-zinc-200 font-medium" : "text-zinc-500"}`}
+                title={mail.subject}
+              >
+                {mail.subject}
+              </h3>
+
+              {/* Row 3: snippet */}
+              <p className="mt-0.5 min-w-0 truncate text-[11px] text-zinc-600" title={mail.snippet}>
+                {snippetPrefix}{mail.snippet}
+              </p>
+
+              {/* Account badge (multi-account "all" view) */}
+              {showAccountBadge && (() => {
+                const acc = accounts?.find(a => a.id === mail.account_id);
+                if (!acc) return null;
+                return (
+                  <div className="mt-1 flex items-center gap-1">
+                    {acc.picture ? (
+                      <img src={acc.picture} className="w-3.5 h-3.5 rounded-full shrink-0" alt="" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full bg-zinc-700 flex items-center justify-center text-[8px] font-bold text-zinc-400 shrink-0">
+                        {acc.email[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-[10px] text-zinc-600 truncate">{acc.email}</span>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

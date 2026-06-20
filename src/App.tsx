@@ -14,10 +14,11 @@ import { themePresets, type ThemePresetName } from "./theme";
 import "./index.css";
 
 import {
-  type Account, type EmailSummary, type AuthInfo, type AppControls, type OtpMode, type RenderMode,
+  type Account, type EmailSummary, type ThreadGroup, type AuthInfo, type AppControls, type OtpMode, type RenderMode,
   type MailZoom, type DensityMode, type MailViewMode, type MailViewPreference,
   type MailDebugMetrics, DEFAULT_APP_CONTROLS,
 } from "./types";
+import { useMemo } from "react";
 import {
   MAIL_TABS, AUTH_RELOGIN_MESSAGE, STARTUP_NETWORK_DELAY_MS, STARTUP_UPDATE_DELAY_MS,
   MAX_LABEL_CACHE, ZOOM_STEPS,
@@ -87,6 +88,7 @@ function App() {
   const [isBodyLoading, setIsBodyLoading] = useState(false);
   const [bodyError, setBodyError] = useState<string | null>(null);
   const [threadEmails, setThreadEmails] = useState<EmailSummary[]>([]);
+  const [threadRefreshKey, setThreadRefreshKey] = useState(0);
   const [debugMetrics, setDebugMetrics] = useState<MailDebugMetrics>({
     openedCount: 0, lastBodyBytes: 0, cachedLabels: 0, cachedMessages: 0,
   });
@@ -1041,17 +1043,23 @@ function App() {
       const senderAddr = extractAddress(activeMail.sender);
       let toField: string;
       if (replyMode === "reply-all") {
+        const myAddr = activeMail.account_id ?? "";
+        const toAddrs = activeMail.recipient
+          .split(",")
+          .map(a => extractAddress(a.trim()))
+          .filter(a => a.length > 0 && a.toLowerCase() !== myAddr.toLowerCase());
         const ccAddrs = activeMail.cc
           .split(",")
           .map(a => extractAddress(a.trim()))
-          .filter(a => a.length > 0);
-        toField = [senderAddr, ...ccAddrs].join(", ");
+          .filter(a => a.length > 0 && a.toLowerCase() !== myAddr.toLowerCase());
+        toField = [senderAddr, ...toAddrs, ...ccAddrs].join(", ");
       } else {
         toField = senderAddr;
       }
       const quotedDate = formatDateFull(activeMail.date);
       const quotedHtml = `<br/><br/><div style="border-left:3px solid #ccc;padding-left:12px;color:#888;margin-top:8px"><div style="margin-bottom:6px;font-size:12px">On ${quotedDate}, <b>${activeMail.sender}</b> wrote:</div>${selectedMailBody || activeMail.snippet}</div>`;
       await invoke("send_reply", {
+        accountId: activeMail.account_id,
         accessToken,
         to: toField,
         subject: activeMail.subject,
@@ -1061,6 +1069,7 @@ function App() {
       });
       setReplyText("");
       setShowReply(false);
+      setThreadRefreshKey(k => k + 1);
     } catch {
       showToast("Yanıt gönderilemedi", "error");
     }
@@ -1220,18 +1229,25 @@ function App() {
   useEffect(() => { setVerificationCopyState("idle"); }, [selectedMail]);
 
   const selectedMailThreadId = activeMail?.thread_id;
-  const selectedMailAccountId = activeMail?.account_id;
   useEffect(() => {
     if (!selectedMail || !selectedMailThreadId) { setThreadEmails([]); return; }
     let cancelled = false;
-    invoke<EmailSummary[]>("get_thread_emails", {
-      threadId: selectedMailThreadId,
-      accountId: selectedMailAccountId ?? "",
-    })
-      .then(all => { if (!cancelled) setThreadEmails(all.filter(e => e.id !== selectedMail)); })
+    invoke<EmailSummary[]>("get_thread_emails", { threadId: selectedMailThreadId })
+      .then(all => {
+        if (cancelled) return;
+        setThreadEmails(all);
+        for (const email of all) {
+          if (email.unread && !recentlyReadRef.current.has(email.id)) {
+            recentlyReadRef.current.add(email.id);
+            setEmails(prev => prev.map(m => m.id === email.id ? { ...m, unread: false } : m));
+            const token = getTokenForEmail(email);
+            if (token) invoke("mark_as_read", { accessToken: token, messageId: email.id }).catch(console.error);
+          }
+        }
+      })
       .catch(() => { if (!cancelled) setThreadEmails([]); });
     return () => { cancelled = true; };
-  }, [selectedMail, selectedMailThreadId, selectedMailAccountId]);
+  }, [selectedMail, selectedMailThreadId, threadRefreshKey]);
 
   const displayEmails = emails.filter(email => {
     if (!searchQuery) return true;
@@ -1241,6 +1257,26 @@ function App() {
       email.snippet.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+
+  const threadGroups = useMemo((): ThreadGroup[] => {
+    const map = new Map<string, ThreadGroup>();
+    for (const email of displayEmails) {
+      const key = email.thread_id || email.id;
+      const name = email.sender.split("<")[0].replace(/"/g, "").trim() || email.sender;
+      const ex = map.get(key);
+      if (!ex) {
+        map.set(key, { latestEmail: email, hasUnread: email.unread, count: 1, participants: [name] });
+      } else {
+        map.set(key, {
+          latestEmail: email.date > ex.latestEmail.date ? email : ex.latestEmail,
+          hasUnread: ex.hasUnread || email.unread,
+          count: ex.count + 1,
+          participants: ex.participants.includes(name) ? ex.participants : [...ex.participants, name],
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.latestEmail.date - a.latestEmail.date);
+  }, [displayEmails]);
 
   const unreadCount = inboxUnread;
   const hasLoadedActiveBody = !!activeMail && selectedMailBodyId === activeMail.id;
@@ -1420,7 +1456,7 @@ function App() {
           <>
             <EmailList
               className={mailListClassName}
-              displayEmails={displayEmails}
+              threadGroups={threadGroups}
               selectedMail={selectedMail}
               onMailClick={handleMailClick}
               isUserSyncing={isUserSyncing}
