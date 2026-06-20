@@ -13,6 +13,8 @@ interface NotificationPayload {
   code?: string | null;
   emailId?: string | null;
   duration?: number | null;
+  accountId?: string | null;
+  accountPicture?: string | null;
 }
 
 export default function NotificationWindow() {
@@ -34,7 +36,7 @@ export default function NotificationWindow() {
       if (payload?.kind === "update") {
         await emit("open-update-settings");
       } else if (payload?.emailId) {
-        await emit("open-notification-mail", { emailId: payload.emailId });
+        await emit("open-notification-mail", { emailId: payload.emailId, accountId: payload.accountId });
       }
     } catch (e) {
       console.error("focus_main_window failed:", e);
@@ -79,6 +81,7 @@ export default function NotificationWindow() {
   const isUpdate = payload?.kind === "update";
   const duration = payload?.duration ?? 5000;
   const Icon = isUpdate ? DownloadCloud : Mail;
+  const showAccountAvatar = !isUpdate && !!payload?.accountId;
   const palette = isUpdate
     ? {
         background: "#1f1808",
@@ -150,13 +153,31 @@ export default function NotificationWindow() {
 
           {/* Mail content */}
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", paddingRight: 24 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: "50%",
-              background: palette.iconBg, display: "flex",
-              alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2,
-            }}>
-              <Icon style={{ width: 16, height: 16, color: palette.iconColor }} />
-            </div>
+            {showAccountAvatar ? (
+              payload?.accountPicture ? (
+                <img
+                  src={payload.accountPicture}
+                  style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2, objectFit: "cover" }}
+                  alt=""
+                />
+              ) : (
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%", flexShrink: 0, marginTop: 2,
+                  background: palette.iconBg, display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 14, fontWeight: 700, color: palette.iconColor,
+                }}>
+                  {(payload?.accountId?.[0] ?? "?").toUpperCase()}
+                </div>
+              )
+            ) : (
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%",
+                background: palette.iconBg, display: "flex",
+                alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2,
+              }}>
+                <Icon style={{ width: 16, height: 16, color: palette.iconColor }} />
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", minWidth: 0 }}>
               <div style={{
                 fontSize: 14, fontWeight: 600, color: palette.title,

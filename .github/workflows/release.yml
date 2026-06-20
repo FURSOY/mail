@@ -9,7 +9,7 @@ on:
       notes:
         description: "Release notes"
         required: false
-        default: "Fixed a critical bug where login session was lost every time the app was closed and reopened."
+        default: "Added multi-account notification support: notifications now show the account avatar and clicking a notification switches to the correct account automatically."
 
 permissions:
   contents: write
@@ -100,7 +100,7 @@ jobs:
         run: |
           $notes = $env:RELEASE_NOTES_INPUT
           if ([string]::IsNullOrWhiteSpace($notes)) {
-            $notes = "Fixed a critical bug where login session was lost every time the app was closed and reopened."
+            $notes = "Added multi-account notification support: notifications now show the account avatar and clicking a notification switches to the correct account automatically."
           }
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding UTF8
 

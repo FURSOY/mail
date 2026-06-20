@@ -399,8 +399,13 @@ function App() {
   };
 
   useEffect(() => {
-    const openNotificationMail = async (emailId: string) => {
+    const openNotificationMail = async (emailId: string, accountId?: string) => {
       if (!emailId) return;
+      if (accountId && accountId !== activeAccountIdRef.current) {
+        setActiveAccountId(accountId);
+        activeAccountIdRef.current = accountId;
+        tabEmailCacheRef.current = {};
+      }
       setMobileMenuOpen(false);
       startTabTransition(() => setActiveTab("inbox"));
       setSelectedMail(emailId);
@@ -410,8 +415,8 @@ function App() {
       await getCurrentWindow().setFocus();
     };
 
-    const unlistenCustomPromise = listen<{ emailId?: string }>("open-notification-mail", async (event) => {
-      await openNotificationMail(event.payload?.emailId || "");
+    const unlistenCustomPromise = listen<{ emailId?: string; accountId?: string }>("open-notification-mail", async (event) => {
+      await openNotificationMail(event.payload?.emailId || "", event.payload?.accountId);
     });
     const unlistenPluginPromise = listen<{ actionId: string; notification: { title: string; body: string } }>(
       "notification-action",
@@ -560,6 +565,7 @@ function App() {
         const senderName = email.sender.split("<")[0].replace(/"/g, "").trim() || email.sender;
         const body = otpMode === "off" ? "" : await invoke<string>("get_email_body", { id: email.id }).catch(() => "");
         const code = extractVerificationCode({ ...email, body_html: body }, otpMode);
+        const account = accountsRef.current.find(a => a.id === email.account_id);
         await invoke("show_custom_notification", {
           title: senderName.slice(0, 64),
           body: (email.subject || email.snippet || "").trim().slice(0, 100) || "Yeni ileti",
@@ -567,6 +573,8 @@ function App() {
           code: code || null,
           emailId: email.id,
           duration: notifInfiniteRef.current ? 0 : notifDurationRef.current * 1000,
+          accountId: email.account_id || null,
+          accountPicture: account?.picture || null,
         });
       }
     } catch (e) {
