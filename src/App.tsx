@@ -577,6 +577,7 @@ function App() {
           duration: notifInfiniteRef.current ? 0 : notifDurationRef.current * 1000,
           accountId: email.account_id || null,
           accountPicture: account?.picture || null,
+          multiAccount: accountsRef.current.length > 1,
         });
       }
     } catch (e) {
@@ -1030,8 +1031,8 @@ function App() {
     });
   };
 
-  const handleReply = async () => {
-    if (!activeMail || !replyText.trim()) return;
+  const handleReply = async (replyAttachments: import("./types").AttachmentPayload[] = [], body = "") => {
+    if (!activeMail || !body.trim()) return;
     const accessToken = getTokenForEmail(activeMail);
     if (!accessToken) return;
     setIsSending(true);
@@ -1063,9 +1064,10 @@ function App() {
         accessToken,
         to: toField,
         subject: activeMail.subject,
-        body: replyText.replace(/\n/g, "<br/>") + quotedHtml,
+        body: body + quotedHtml,
         threadId: activeMail.thread_id || activeMail.id,
         messageId: activeMail.id,
+        attachments: replyAttachments.length > 0 ? replyAttachments : null,
       });
       setReplyText("");
       setShowReply(false);
@@ -1076,7 +1078,7 @@ function App() {
     setIsSending(false);
   };
 
-  const handleComposeSend = async () => {
+  const handleComposeSend = async (attachments: import("./types").AttachmentPayload[], body: string) => {
     if (!composeTo.trim() || !composeSubject.trim()) return;
     const sendFromId = composeAccountId ?? activeAccountId ?? accounts[0]?.id;
     if (!sendFromId) { setComposeSendError("Gönderecek hesap bulunamadı."); return; }
@@ -1102,8 +1104,8 @@ function App() {
     }
 
     try {
-      const body = composeBody.replace(/\n/g, "<br/>") + composeHtmlAppend;
-      await invoke("send_email", { accessToken: token, to: composeTo, subject: composeSubject, body });
+      const finalBody = body + composeHtmlAppend;
+      await invoke("send_email", { accessToken: token, to: composeTo, subject: composeSubject, body: finalBody, attachments: attachments.length > 0 ? attachments : null });
       setShowCompose(false);
       setComposeTo("");
       setComposeSubject("");
@@ -1514,6 +1516,8 @@ function App() {
                 mailScrollRef={mailScrollRef}
                 relayoutKey={`${mailViewMode}|${singlePanelView}|${windowWidth}`}
                 threadEmails={threadEmails}
+                accessToken={getTokenForEmail(activeMail) ?? null}
+                showToast={showToast}
               />
             ) : (
               <main

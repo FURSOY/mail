@@ -1,12 +1,34 @@
-import { useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, useEffect, type CSSProperties } from "react";
 import {
   CornerUpLeft, Inbox, Send, Archive, ShieldAlert, Trash2,
   Users, Forward, Eye, RotateCcw, Minus, Plus, Maximize2,
   Settings, X, RefreshCw, Copy, ChevronDown, ChevronUp,
+  Download, FileText, Image, File, Type, Link2, List, ListOrdered, Paperclip, Undo2, Redo2,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { tr } from "../i18n";
-import type { EmailSummary, MailViewMode, MailZoom, RenderMode } from "../types";
+import type { EmailSummary, MailViewMode, MailZoom, RenderMode, AttachmentPayload } from "../types";
+
+interface AttachmentInfo {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  attachment_id: string | null;
+  data: string | null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function AttachmentIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType.startsWith("image/")) return <Image className="w-3.5 h-3.5" />;
+  if (mimeType === "application/pdf" || mimeType.startsWith("text/")) return <FileText className="w-3.5 h-3.5" />;
+  return <File className="w-3.5 h-3.5" />;
+}
 import { formatDateFull, buildRenderableEmailHtml } from "../utils";
 import { EmailHtmlView } from "./EmailHtmlView";
 import { ToolbarTip } from "./ToolbarTip";
@@ -160,7 +182,7 @@ interface EmailReaderProps {
   replyText: string;
   setReplyText: (v: string) => void;
   isSending: boolean;
-  onSendReply: () => void;
+  onSendReply: (attachments: AttachmentPayload[], body: string) => void;
 
   mailZoom: MailZoom;
   setMailFitScale: (scale: number) => void;
@@ -192,6 +214,8 @@ interface EmailReaderProps {
   mailScrollRef: React.RefObject<HTMLDivElement | null>;
   relayoutKey: string;
   threadEmails: EmailSummary[];
+  accessToken: string | null;
+  showToast: (msg: string, kind: "success" | "error" | "info") => void;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -206,9 +230,160 @@ export function EmailReader({
   verificationCode, verificationCopyState, setVerificationCopyState,
   showArchiveBtn, showRestoreBtn, showTrashToBinBtn, showDeleteForeverBtn,
   onArchive, onTrash, onMoveToInbox, onPermanentDelete, onMarkAsUnread, onForward,
-  onOpenUrl, mailScrollRef, relayoutKey, threadEmails,
+  onOpenUrl, mailScrollRef, relayoutKey, threadEmails, accessToken, showToast,
 }: EmailReaderProps) {
-  const replyRef = useRef<HTMLTextAreaElement>(null);
+  const replyEditableRef = useRef<HTMLDivElement>(null);
+  const replyFileInputRef = useRef<HTMLInputElement>(null);
+  const [replyEmpty, setReplyEmpty] = useState(true);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [showFormatBar, setShowFormatBar] = useState(false);
+  const [linkPopover, setLinkPopover] = useState(false);
+  const [linkText, setLinkText] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const savedRangeRef = useRef<Range | null>(null);
+  const [replyAttachments, setReplyAttachments] = useState<(AttachmentPayload & { size: number })[]>([]);
+  const [replyAttachError, setReplyAttachError] = useState<string | null>(null);
+
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAttachments([]);
+    setThumbnails({});
+    invoke<AttachmentInfo[]>("get_email_attachments", { emailId: activeMail.id })
+      .then(atts => {
+        setAttachments(atts);
+        if (!accessToken) return;
+        // Fetch thumbnails for image attachments that don't have inline data
+        const imageAtts = atts.filter(a => a.mime_type.startsWith("image/") && !a.data);
+        if (imageAtts.length === 0) return;
+        const emailId = activeMail.id;
+        const token = accessToken;
+        Promise.allSettled(
+          imageAtts.map(a =>
+            invoke<string>("fetch_attachment_data", {
+              emailId,
+              attachmentDbId: a.id,
+              accessToken: token,
+            }).then(data => ({ id: a.id, data }))
+          )
+        ).then(results => {
+          const map: Record<string, string> = {};
+          for (const r of results) {
+            if (r.status === "fulfilled") map[r.value.id] = r.value.data;
+          }
+          if (Object.keys(map).length > 0) setThumbnails(map);
+        });
+      })
+      .catch(() => {});
+  }, [activeMail.id, accessToken]);
+
+  const handleDownload = async (att: AttachmentInfo) => {
+    if (!accessToken) return;
+    setDownloadingId(att.id);
+    try {
+      const savedName = await invoke<string>("save_and_reveal_attachment", {
+        emailId: activeMail.id,
+        attachmentDbId: att.id,
+        accessToken,
+      });
+      showToast(`${savedName} İndirilenlere kaydedildi`, "success");
+    } catch (e) {
+      showToast("İndirme başarısız", "error");
+      console.error("Download failed:", e);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  // Clear contenteditable when reply is hidden or replyText is reset by parent
+  useEffect(() => {
+    if (!showReply) {
+      setShowFormatBar(false);
+      setLinkPopover(false);
+      setReplyEmpty(true);
+      setReplyAttachments([]);
+      setReplyAttachError(null);
+      if (replyEditableRef.current) replyEditableRef.current.innerHTML = "";
+    }
+  }, [showReply]);
+
+  useEffect(() => {
+    if (replyText === "" && replyEditableRef.current) {
+      replyEditableRef.current.innerHTML = "";
+      setReplyEmpty(true);
+    }
+  }, [replyText]);
+
+  const syncUndoRedo = () => {
+    setCanUndo(document.queryCommandEnabled("undo"));
+    setCanRedo(document.queryCommandEnabled("redo"));
+  };
+
+  const applyFormat = (command: string, value?: string) => {
+    replyEditableRef.current?.focus();
+    document.execCommand(command, false, value);
+    setReplyEmpty(!(replyEditableRef.current?.innerText.trim()));
+    syncUndoRedo();
+  };
+
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      setLinkText(sel.toString());
+    }
+  };
+
+  const restoreSelection = () => {
+    const sel = window.getSelection();
+    if (sel && savedRangeRef.current) {
+      sel.removeAllRanges();
+      sel.addRange(savedRangeRef.current);
+    }
+  };
+
+  const applyLink = () => {
+    if (!linkUrl) return;
+    restoreSelection();
+    replyEditableRef.current?.focus();
+    if (linkText && !window.getSelection()?.toString()) {
+      document.execCommand("insertHTML", false, `<a href="${linkUrl}">${linkText}</a>`);
+    } else {
+      document.execCommand("createLink", false, linkUrl);
+    }
+    setReplyEmpty(!(replyEditableRef.current?.innerText.trim()));
+    setLinkPopover(false);
+    setLinkText("");
+    setLinkUrl("");
+  };
+
+  const BLOCKED_EXT = new Set(["exe","bat","cmd","com","msi","scr","pif","vbs","vbe","js","jse","jar","wsf","wsh","ps1","reg","inf","lnk"]);
+  const MAX_ATT_BYTES = 20 * 1024 * 1024;
+
+  const handleReplyFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
+    setReplyAttachError(null);
+    const blocked = files.filter(f => BLOCKED_EXT.has(f.name.split(".").pop()?.toLowerCase() ?? ""));
+    if (blocked.length) { setReplyAttachError(`Engellenen tür: ${blocked.map(f => f.name).join(", ")}`); return; }
+    const existingBytes = replyAttachments.reduce((s, a) => s + a.size, 0);
+    const newBytes = files.reduce((s, f) => s + f.size, 0);
+    if (existingBytes + newBytes > MAX_ATT_BYTES) {
+      setReplyAttachError(`Toplam ek boyutu 20 MB'ı geçemez.`); return;
+    }
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(",")[1];
+        setReplyAttachments(prev => [...prev, { filename: file.name, mimeType: file.type || "application/octet-stream", data: base64, size: file.size }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   // All emails to render: full thread if available, otherwise just activeMail
   const allEmails = threadEmails.length > 0 ? threadEmails : [activeMail];
@@ -216,7 +391,7 @@ export function EmailReader({
   const openReply = (mode: "reply" | "reply-all") => {
     setReplyMode(mode);
     setShowReply(true);
-    setTimeout(() => replyRef.current?.focus(), 100);
+    setTimeout(() => replyEditableRef.current?.focus(), 100);
   };
 
   return (
@@ -416,6 +591,49 @@ export function EmailReader({
           {/* Subject heading */}
           <h1 className="text-xl font-bold text-zinc-100 mb-5 leading-snug">{activeMail.subject}</h1>
 
+          {/* Received email attachments */}
+          {attachments.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {attachments.map(att => {
+                const isImage = att.mime_type.startsWith("image/");
+                const thumbData = att.data ?? thumbnails[att.id] ?? null;
+                const hasThumb = isImage && thumbData;
+                return (
+                  <button
+                    key={att.id}
+                    type="button"
+                    onClick={() => handleDownload(att)}
+                    disabled={downloadingId === att.id}
+                    className="flex flex-col rounded-lg bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:border-white/[0.14] transition-colors text-left disabled:opacity-50 overflow-hidden"
+                    style={{ maxWidth: 200 }}
+                  >
+                    {hasThumb && (
+                      <img
+                        src={`data:${att.mime_type};base64,${thumbData}`}
+                        alt=""
+                        className="w-full object-cover"
+                        style={{ maxHeight: 160 }}
+                      />
+                    )}
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <span className="text-zinc-400 shrink-0">
+                        <AttachmentIcon mimeType={att.mime_type} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-zinc-300 truncate">{att.filename}</div>
+                        <div className="text-[10px] text-zinc-600">{formatBytes(att.size)}</div>
+                      </div>
+                      {downloadingId === att.id
+                        ? <RefreshCw className="w-3.5 h-3.5 text-zinc-500 animate-spin shrink-0" />
+                        : <Download className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                      }
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* OTP Banner */}
           {verificationCode && (
             <div className="mb-5 flex items-center justify-between px-4 py-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
@@ -508,6 +726,7 @@ export function EmailReader({
           {/* Reply Box */}
           {showReply && (
             <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+              {/* To: header */}
               <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
                 {replyMode === "reply-all"
                   ? <Users className="w-3.5 h-3.5 text-zinc-500" />
@@ -521,31 +740,204 @@ export function EmailReader({
                   )}
                 </span>
               </div>
-              <textarea
-                ref={replyRef}
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={tr.mail.writeReply}
-                className="w-full bg-transparent p-4 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none resize-none min-h-[120px] select-text"
-              />
-              <div className="px-3 py-2 border-t border-white/[0.04] text-[11px] text-zinc-700 italic truncate">
+
+              {/* Editable area */}
+              <div className="relative px-4 pt-4 pb-3 min-h-[120px]">
+                {replyEmpty && (
+                  <span className="absolute top-4 left-4 pointer-events-none text-zinc-600 text-sm select-none">
+                    {tr.mail.writeReply}
+                  </span>
+                )}
+                <div
+                  ref={replyEditableRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={() => {
+                    setReplyEmpty(!(replyEditableRef.current?.innerText.trim()));
+                    syncUndoRedo();
+                  }}
+                  className="outline-none text-sm text-zinc-200 min-h-[96px] [&_a]:text-blue-400 [&_a]:underline [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
+                  style={{ wordBreak: "break-word" }}
+                />
+              </div>
+
+              {/* Quote attribution */}
+              <div className="px-4 pb-2 text-[11px] text-zinc-700 italic truncate border-t border-white/[0.03] pt-2">
                 — {activeMail.sender.split("<")[0].replace(/"/g, "").trim()}, {formatDateFull(activeMail.date)}
               </div>
-              <div className="px-4 py-2.5 border-t border-white/5 flex items-center justify-between">
-                <button
-                  onClick={() => { setShowReply(false); setReplyText(""); }}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  {tr.mail.cancel}
-                </button>
-                <button
-                  onClick={onSendReply}
-                  disabled={!replyText.trim() || isSending}
-                  className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-2"
-                >
-                  {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                  {isSending ? tr.compose.sending : tr.mail.sendReply}
-                </button>
+
+              {/* Formatting toolbar — visible when showFormatBar */}
+              {showFormatBar && (
+                <div className="relative px-3 py-1.5 border-t border-white/[0.06] flex items-center gap-0.5">
+                  {/* Link popover */}
+                  {linkPopover && (
+                    <div className="absolute bottom-full left-0 mb-1 bg-[#18181b] border border-white/10 rounded-xl p-3 shadow-2xl z-50 w-64">
+                      <div className="flex flex-col gap-2">
+                        <input
+                          autoFocus
+                          value={linkText}
+                          onChange={e => setLinkText(e.target.value)}
+                          placeholder="Metin"
+                          className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
+                        />
+                        <input
+                          value={linkUrl}
+                          onChange={e => setLinkUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
+                          onKeyDown={e => e.key === "Enter" && applyLink()}
+                        />
+                        <div className="flex gap-2 justify-end pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setLinkPopover(false)}
+                            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                          >İptal</button>
+                          <button
+                            type="button"
+                            onClick={applyLink}
+                            disabled={!linkUrl}
+                            className="px-3 py-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-xs rounded-md transition-colors"
+                          >Uygula</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Format buttons */}
+                  <button type="button" title="Geri Al" disabled={!canUndo} onMouseDown={e => { e.preventDefault(); applyFormat("undo"); }}
+                    className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${canUndo ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] cursor-pointer" : "text-zinc-700 cursor-default"}`}>
+                    <Undo2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" title="Yeniden Yap" disabled={!canRedo} onMouseDown={e => { e.preventDefault(); applyFormat("redo"); }}
+                    className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${canRedo ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] cursor-pointer" : "text-zinc-700 cursor-default"}`}>
+                    <Redo2 className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
+                  {([
+                    { cmd: "bold",          label: "B",  cls: "font-bold",      title: "Kalın" },
+                    { cmd: "italic",        label: "I",  cls: "italic",         title: "İtalik" },
+                    { cmd: "underline",     label: "U",  cls: "underline",      title: "Altçizgi" },
+                    { cmd: "strikeThrough", label: "S",  cls: "line-through",   title: "Üstçizgi" },
+                  ] as const).map(({ cmd, label, cls, title }) => (
+                    <button
+                      key={cmd}
+                      type="button"
+                      title={title}
+                      onMouseDown={e => { e.preventDefault(); applyFormat(cmd); }}
+                      className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] text-xs transition-colors"
+                    >
+                      <span className={cls}>{label}</span>
+                    </button>
+                  ))}
+
+                  <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
+
+                  <button
+                    type="button"
+                    title="Bağlantı ekle"
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      saveSelection();
+                      setLinkUrl("");
+                      setLinkPopover(v => !v);
+                    }}
+                    className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                      linkPopover ? "text-blue-400 bg-blue-500/10" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
+
+                  <button
+                    type="button"
+                    title="Numaralı liste"
+                    onMouseDown={e => { e.preventDefault(); applyFormat("insertOrderedList"); }}
+                    className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Madde işareti listesi"
+                    onMouseDown={e => { e.preventDefault(); applyFormat("insertUnorderedList"); }}
+                    className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Reply attachment chips */}
+              {replyAttachments.length > 0 && (
+                <div className="px-3 pb-1 flex flex-wrap gap-1.5">
+                  {replyAttachments.map((att, idx) => (
+                    <div key={idx} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.07] text-zinc-400 max-w-[200px]">
+                      <AttachmentIcon mimeType={att.mimeType} />
+                      <span className="text-[11px] truncate min-w-0">{att.filename}</span>
+                      <span className="text-[10px] text-zinc-600 shrink-0">{formatBytes(att.size)}</span>
+                      <button type="button" onClick={() => setReplyAttachments(p => p.filter((_, i) => i !== idx))} className="shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {replyAttachError && (
+                <div className="mx-3 mb-1.5 flex items-center gap-2 text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-2.5 py-1.5">
+                  <span className="min-w-0">{replyAttachError}</span>
+                  <button type="button" onClick={() => setReplyAttachError(null)} className="ml-auto shrink-0 text-red-400/60 hover:text-red-400"><X className="w-3 h-3" /></button>
+                </div>
+              )}
+
+              {/* Bottom action bar */}
+              <div className="px-3 py-2 border-t border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  {/* Paperclip */}
+                  <button
+                    type="button"
+                    title="Dosya ekle"
+                    onClick={() => replyFileInputRef.current?.click()}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors"
+                  >
+                    <Paperclip className="w-3.5 h-3.5" />
+                  </button>
+                  <input ref={replyFileInputRef} type="file" multiple className="hidden" onChange={handleReplyFileSelect} />
+
+                  {/* Formatting toggle */}
+                  <button
+                    type="button"
+                    title="Biçimlendirme"
+                    onClick={() => { setShowFormatBar(v => !v); setLinkPopover(false); }}
+                    className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                      showFormatBar ? "text-blue-400 bg-blue-500/10" : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <Type className="w-3.5 h-3.5" />
+                    <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${showFormatBar ? "rotate-180" : ""}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowReply(false); setReplyText(""); }}
+                    className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    {tr.mail.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSendReply(replyAttachments, replyEditableRef.current?.innerHTML ?? "")}
+                    disabled={replyEmpty || isSending}
+                    className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-2"
+                  >
+                    {isSending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    {isSending ? tr.compose.sending : tr.mail.sendReply}
+                  </button>
+                </div>
               </div>
             </div>
           )}

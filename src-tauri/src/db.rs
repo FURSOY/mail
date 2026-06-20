@@ -75,6 +75,18 @@ pub struct Account {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Attachment {
+    pub id: String,
+    pub email_id: String,
+    pub account_id: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub size: i64,
+    pub attachment_id: Option<String>, // Gmail attachment ID for on-demand fetch
+    pub data: Option<String>,          // base64 data for small inline attachments
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Email {
     pub id: String,
     pub thread_id: String,
@@ -135,6 +147,21 @@ pub fn init_db(app: &AppHandle) -> Result<()> {
             email TEXT NOT NULL UNIQUE,
             picture TEXT NOT NULL DEFAULT '',
             display_order INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+
+    // attachments table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS attachments (
+            id TEXT PRIMARY KEY,
+            email_id TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            size INTEGER NOT NULL DEFAULT 0,
+            attachment_id TEXT,
+            data TEXT
         )",
         [],
     )?;
@@ -792,6 +819,68 @@ pub fn get_thread_emails(
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let rows: Vec<EmailSummary> = stmt
         .query_map(params![thread_id], map_summary_row)
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+pub fn upsert_attachments(app: &AppHandle, attachments: Vec<Attachment>) -> Result<()> {
+    if attachments.is_empty() {
+        return Ok(());
+    }
+    let db_path = get_db_path(app);
+    let mut conn = Connection::open(db_path)?;
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare(
+            "INSERT INTO attachments (id, email_id, account_id, filename, mime_type, size, attachment_id, data)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(id) DO UPDATE SET
+                filename      = excluded.filename,
+                mime_type     = excluded.mime_type,
+                size          = excluded.size,
+                attachment_id = excluded.attachment_id,
+                data          = excluded.data",
+        )?;
+        for att in &attachments {
+            stmt.execute(params![
+                att.id, att.email_id, att.account_id,
+                att.filename, att.mime_type, att.size,
+                att.attachment_id, att.data,
+            ])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_email_attachments(
+    app: tauri::AppHandle,
+    email_id: String,
+) -> Result<Vec<Attachment>, String> {
+    let db_path = get_db_path(&app);
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, email_id, account_id, filename, mime_type, size, attachment_id, data
+             FROM attachments WHERE email_id = ?1 ORDER BY rowid ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![email_id], |row| {
+            Ok(Attachment {
+                id: row.get(0)?,
+                email_id: row.get(1)?,
+                account_id: row.get(2)?,
+                filename: row.get(3)?,
+                mime_type: row.get(4)?,
+                size: row.get(5)?,
+                attachment_id: row.get(6)?,
+                data: row.get(7)?,
+            })
+        })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
         .collect();

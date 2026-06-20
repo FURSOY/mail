@@ -9,7 +9,7 @@ on:
       notes:
         description: "Release notes"
         required: false
-        default: "Gmail-style thread view: emails in the same conversation are now grouped in the list and displayed as an expandable card stack in the reader. Sent replies are saved to the local database instantly so they appear in the thread without waiting for the next sync. Fixed thread_id migration so older emails correctly join conversations."
+        default: "Attachment support: view, preview, and download attachments from received emails. Compose and reply with file attachments (up to 20 MB total). Rich-text reply editor with formatting toolbar (bold, italic, underline, links, lists, undo/redo). Multi-account notification labels. Fixed WebView2 DPI rendering glitch when restoring the window from tray."
 
 permissions:
   contents: write
@@ -100,7 +100,7 @@ jobs:
         run: |
           $notes = $env:RELEASE_NOTES_INPUT
           if ([string]::IsNullOrWhiteSpace($notes)) {
-            $notes = "Gmail-style thread view: emails in the same conversation are now grouped in the list and displayed as an expandable card stack in the reader. Sent replies are saved to the local database instantly so they appear in the thread without waiting for the next sync. Fixed thread_id migration so older emails correctly join conversations."
+            $notes = "Attachment support: view, preview, and download attachments from received emails. Compose and reply with file attachments (up to 20 MB total). Rich-text reply editor with formatting toolbar (bold, italic, underline, links, lists, undo/redo). Multi-account notification labels. Fixed WebView2 DPI rendering glitch when restoring the window from tray."
           }
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding UTF8
 

@@ -19,6 +19,8 @@ pub struct NotificationPayload {
     pub account_id: Option<String>,
     #[serde(rename = "accountPicture")]
     pub account_picture: Option<String>,
+    #[serde(rename = "multiAccount")]
+    pub multi_account: Option<bool>,
 }
 
 pub struct PendingNotification(pub Mutex<Option<NotificationPayload>>);
@@ -82,6 +84,7 @@ pub async fn show_custom_notification(
     duration: Option<u32>,
     account_id: Option<String>,
     account_picture: Option<String>,
+    multi_account: Option<bool>,
 ) {
     if crate::settings::read_app_controls(&app).notifications_muted {
         return;
@@ -91,7 +94,7 @@ pub async fn show_custom_notification(
         return;
     }
 
-    let payload = NotificationPayload { title, body, kind, code, email_id, duration, account_id, account_picture };
+    let payload = NotificationPayload { title, body, kind, code, email_id, duration, account_id, account_picture, multi_account };
 
     // If window already exists (hidden or visible), just send new notification
     if let Some(window) = app.get_webview_window("notification") {
@@ -164,12 +167,29 @@ pub fn get_screen_info(app: AppHandle) -> (f64, f64) {
     }
 }
 
+/// Show the main window and force WebView2 to re-render at the correct DPI.
+/// On Windows, hiding a WebView2 window puts it in a degraded render mode;
+/// setting the size again after show() triggers a proper recompose.
+pub fn show_main_window(window: &tauri::WebviewWindow) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    // Force WebView2 to re-render at correct DPI after being hidden.
+    // Skip if maximized/fullscreen — set_size would un-maximize the window.
+    let is_maximized = window.is_maximized().unwrap_or(false);
+    let is_fullscreen = window.is_fullscreen().unwrap_or(false);
+    if !is_maximized && !is_fullscreen {
+        if let Ok(size) = window.inner_size() {
+            let _ = window.set_size(tauri::PhysicalSize::new(size.width + 1, size.height));
+            let _ = window.set_size(tauri::PhysicalSize::new(size.width, size.height));
+        }
+    }
+    let _ = window.set_focus();
+}
+
 /// Called by notification window to focus the main window reliably via Rust
 #[tauri::command]
 pub fn focus_main_window(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        show_main_window(&window);
     }
 }

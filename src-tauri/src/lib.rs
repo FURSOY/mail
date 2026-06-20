@@ -139,9 +139,7 @@ pub fn run() {
                     {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
+                            notify::show_main_window(&window);
                         }
                     }
                 })
@@ -176,6 +174,9 @@ pub fn run() {
             gmail::permanently_delete,
             gmail::send_reply,
             gmail::send_email,
+            gmail::fetch_attachment_data,
+            gmail::save_and_reveal_attachment,
+            db::get_email_attachments,
             notify::show_custom_notification,
             notify::get_pending_notification,
             notify::get_screen_info,

@@ -54,6 +54,12 @@ export interface AppControls {
   quietHoursEnd: string;
 }
 
+export interface AttachmentPayload {
+  filename: string;
+  mimeType: string;
+  data: string; // base64
+}
+
 export const DEFAULT_APP_CONTROLS: AppControls = {
   notificationsMuted: false,
   mailSyncPaused: false,

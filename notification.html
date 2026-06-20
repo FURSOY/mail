@@ -340,14 +340,22 @@
               <polyline points="22,6 12,13 2,6"/>
             </svg>`;
 
+        const isMulti = n.kind !== 'update' && n.multiAccount;
+        const avatarHtml = isMulti && n.accountPicture
+          ? `<img src="${escAttr(n.accountPicture)}" style="width:30px;height:30px;border-radius:50%;flex-shrink:0;object-fit:cover;" alt="" />`
+          : `<div class="icon-circle">${iconSvg}</div>`;
+
+        const toLineHtml = isMulti && n.accountId
+          ? `<div style="font-size:10.5px;color:#52525b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">to: ${esc(n.accountId)}</div>`
+          : '';
+
         card.innerHTML = `
           <button class="close-btn" data-id="${n.id}">&times;</button>
           <div class="card-top">
-            <div class="icon-circle">
-              ${iconSvg}
-            </div>
+            ${avatarHtml}
             <div class="text-area">
               <div class="title">${esc(n.title)}</div>
+              ${toLineHtml}
               <div class="body">${esc(n.body)}</div>
             </div>
           </div>
@@ -392,7 +400,7 @@
       if (!data) return;
       const id = nextId++;
       const kind = data.kind === 'update' ? 'update' : 'mail';
-      notifications.push({ id, title: data.title, body: data.body, code: data.code || null, emailId: data.emailId || null, kind });
+      notifications.push({ id, title: data.title, body: data.body, code: data.code || null, emailId: data.emailId || null, kind, accountId: data.accountId || null, accountPicture: data.accountPicture || null, multiAccount: !!data.multiAccount });
       render();
 
       const duration = data.duration !== undefined ? data.duration : 5000;
@@ -449,7 +457,8 @@
         invoke('focus_main_window').catch(() => {});
         emitTo('main', 'open-update-settings').catch(() => {});
       } else if (notification && notification.emailId) {
-        emitTo('main', 'open-notification-mail', { emailId: notification.emailId }).catch(() => {});
+        invoke('focus_main_window').catch(() => {});
+        emitTo('main', 'open-notification-mail', { emailId: notification.emailId, accountId: notification.accountId }).catch(() => {});
       } else {
         invoke('focus_main_window').catch(() => {});
         emitTo('main', 'focus-main-window').catch(() => {});

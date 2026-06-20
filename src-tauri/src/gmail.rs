@@ -2,8 +2,16 @@ use crate::db::{delete_emails_by_ids, get_history_id, load_tokens, set_history_i
 use base64::Engine;
 use futures::stream::{self, StreamExt};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct AttachmentPayload {
+    pub filename: String,
+    #[serde(rename = "mimeType")]
+    pub mime_type: String,
+    pub data: String, // base64-encoded file content
+}
 
 // ── History API types ──
 
@@ -204,7 +212,7 @@ async fn do_incremental_sync(
 
     // Fetch details for new/changed messages
     if !fetch_ids.is_empty() {
-        let parsed_emails: Vec<Email> = stream::iter(fetch_ids)
+        let parsed: Vec<(Email, Vec<crate::db::Attachment>)> = stream::iter(fetch_ids)
             .map(|id| {
                 let client = &client;
                 let token = access_token;
@@ -220,11 +228,20 @@ async fn do_incremental_sync(
             .collect()
             .await;
 
-        if !parsed_emails.is_empty() {
-            let app_clone = app.clone();
+        if !parsed.is_empty() {
             let acct = account_id.to_string();
+            let (emails, mut all_attachments): (Vec<Email>, Vec<Vec<crate::db::Attachment>>) =
+                parsed.into_iter().unzip();
+            // Backfill account_id into attachments (parse_message_detail doesn't know it)
+            let atts_flat: Vec<crate::db::Attachment> = all_attachments
+                .iter_mut()
+                .flat_map(|v| v.iter_mut().map(|a| { a.account_id = acct.clone(); a.clone() }))
+                .collect();
+            let app_clone = app.clone();
+            let acct2 = acct.clone();
             tokio::task::spawn_blocking(move || {
-                upsert_emails(&app_clone, &acct, parsed_emails).map_err(|e| e.to_string())
+                upsert_emails(&app_clone, &acct2, emails).map_err(|e| e.to_string())?;
+                crate::db::upsert_attachments(&app_clone, atts_flat).map_err(|e| e.to_string())
             })
             .await
             .map_err(|e| format!("DB upsert task failed: {}", e))??;
@@ -268,7 +285,7 @@ async fn do_sync(app: &AppHandle, account_id: &str, access_token: &str) -> Resul
 
     eprintln!("[SYNC:{}] full sync: {} messages to fetch", account_id, all_ids.len());
 
-    let parsed_emails: Vec<Email> = stream::iter(all_ids)
+    let parsed: Vec<(Email, Vec<crate::db::Attachment>)> = stream::iter(all_ids)
         .map(|id| {
             let client = &client;
             let token = access_token;
@@ -284,10 +301,18 @@ async fn do_sync(app: &AppHandle, account_id: &str, access_token: &str) -> Resul
         .collect()
         .await;
 
-    let app_clone = app.clone();
     let acct = account_id.to_string();
+    let (emails, mut all_attachments): (Vec<Email>, Vec<Vec<crate::db::Attachment>>) =
+        parsed.into_iter().unzip();
+    let atts_flat: Vec<crate::db::Attachment> = all_attachments
+        .iter_mut()
+        .flat_map(|v| v.iter_mut().map(|a| { a.account_id = acct.clone(); a.clone() }))
+        .collect();
+    let app_clone = app.clone();
+    let acct2 = acct.clone();
     tokio::task::spawn_blocking(move || {
-        upsert_emails(&app_clone, &acct, parsed_emails).map_err(|e| e.to_string())
+        upsert_emails(&app_clone, &acct2, emails).map_err(|e| e.to_string())?;
+        crate::db::upsert_attachments(&app_clone, atts_flat).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| format!("DB task failed: {}", e))??;
@@ -343,6 +368,9 @@ struct Header {
 struct MessagePart {
     #[serde(rename = "mimeType")]
     mime_type: String,
+    #[serde(rename = "partId")]
+    part_id: Option<String>,
+    filename: Option<String>,
     headers: Option<Vec<Header>>,
     body: Option<MessageBody>,
     parts: Option<Vec<MessagePart>>,
@@ -351,6 +379,9 @@ struct MessagePart {
 #[derive(Deserialize, Debug)]
 struct MessageBody {
     data: Option<String>,
+    #[serde(rename = "attachmentId")]
+    attachment_id: Option<String>,
+    size: Option<i64>,
 }
 
 /// Determine the label for an email based on Gmail label IDs
@@ -368,8 +399,8 @@ fn determine_label(label_ids: &[String]) -> String {
     }
 }
 
-/// Parse a single Gmail message detail into our Email struct
-fn parse_message_detail(detail: MessageDetail) -> Email {
+/// Parse a single Gmail message detail into our Email struct + attachment list
+fn parse_message_detail(detail: MessageDetail) -> (Email, Vec<crate::db::Attachment>) {
     let mut sender = "Unknown Sender".to_string();
     let mut recipient = String::new();
     let mut cc = String::new();
@@ -428,7 +459,13 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
     let label = determine_label(&labels);
     let date_i64 = detail.internal_date.parse::<i64>().unwrap_or(0);
 
-    Email {
+    let attachments = if let Some(parts) = &detail.payload.parts {
+        collect_attachments(parts, &detail.id, "")
+    } else {
+        vec![]
+    };
+
+    let email = Email {
         id: detail.id,
         thread_id: detail.thread_id.unwrap_or_default(),
         sender,
@@ -440,7 +477,9 @@ fn parse_message_detail(detail: MessageDetail) -> Email {
         date: date_i64,
         unread: is_unread,
         label,
-    }
+    };
+
+    (email, attachments)
 }
 
 /// Fetch a list of message IDs from Gmail (with pagination support)
@@ -747,16 +786,52 @@ fn mime_body_base64(body: &str) -> String {
         .join("\r\n")
 }
 
-/// Builds a RFC 2822 raw email string with proper MIME headers for UTF-8 content.
-fn build_raw_mime(headers: &[(&str, String)], body: &str) -> String {
+/// Builds a RFC 2822 raw email. Without attachments: simple text/html.
+/// With attachments: multipart/mixed with HTML part + attachment parts.
+fn build_raw_mime(headers: &[(&str, String)], body: &str, attachments: &[AttachmentPayload]) -> String {
     let mut lines = String::from("MIME-Version: 1.0\r\n");
     for (name, value) in headers {
         lines.push_str(&format!("{}: {}\r\n", name, value));
     }
-    lines.push_str("Content-Type: text/html; charset=\"UTF-8\"\r\n");
-    lines.push_str("Content-Transfer-Encoding: base64\r\n");
-    lines.push_str("\r\n");
-    lines.push_str(&mime_body_base64(body));
+
+    if attachments.is_empty() {
+        lines.push_str("Content-Type: text/html; charset=\"UTF-8\"\r\n");
+        lines.push_str("Content-Transfer-Encoding: base64\r\n");
+        lines.push_str("\r\n");
+        lines.push_str(&mime_body_base64(body));
+    } else {
+        let boundary = "----=_NextPart_fursoymail_001";
+        lines.push_str(&format!("Content-Type: multipart/mixed; boundary=\"{}\"\r\n", boundary));
+        lines.push_str("\r\n");
+
+        // HTML body part
+        lines.push_str(&format!("--{}\r\n", boundary));
+        lines.push_str("Content-Type: text/html; charset=\"UTF-8\"\r\n");
+        lines.push_str("Content-Transfer-Encoding: base64\r\n");
+        lines.push_str("\r\n");
+        lines.push_str(&mime_body_base64(body));
+        lines.push_str("\r\n");
+
+        // Attachment parts
+        for att in attachments {
+            let encoded_name = mime_encode_header(&att.filename);
+            lines.push_str(&format!("--{}\r\n", boundary));
+            lines.push_str(&format!("Content-Type: {}; name=\"{}\"\r\n", att.mime_type, encoded_name));
+            lines.push_str("Content-Transfer-Encoding: base64\r\n");
+            lines.push_str(&format!("Content-Disposition: attachment; filename=\"{}\"\r\n", encoded_name));
+            lines.push_str("\r\n");
+            // Wrap attachment data at 76 chars
+            let wrapped = att.data.as_bytes().chunks(76)
+                .map(|c| std::str::from_utf8(c).unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join("\r\n");
+            lines.push_str(&wrapped);
+            lines.push_str("\r\n");
+        }
+
+        lines.push_str(&format!("--{}--\r\n", boundary));
+    }
+
     lines
 }
 
@@ -770,8 +845,10 @@ pub async fn send_reply(
     body: String,
     thread_id: String,
     message_id: String,
+    attachments: Option<Vec<AttachmentPayload>>,
 ) -> Result<(), String> {
     let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let atts = attachments.unwrap_or_default();
 
     let clean_subject = subject.trim_start_matches("Re: ").trim_start_matches("re: ");
     let raw_email = build_raw_mime(
@@ -782,6 +859,7 @@ pub async fn send_reply(
             ("References", message_id),
         ],
         &body,
+        &atts,
     );
 
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw_email.as_bytes());
@@ -813,7 +891,7 @@ pub async fn send_reply(
     let sent_id = sent_msg["id"].as_str().unwrap_or("").to_string();
     if !sent_id.is_empty() {
         if let Ok(detail) = fetch_message_detail(&client, &access_token, &sent_id).await {
-            let email = parse_message_detail(detail);
+            let (email, _) = parse_message_detail(detail);
             let app_clone = app.clone();
             let acct = account_id.clone();
             let _ = tokio::task::spawn_blocking(move || {
@@ -832,8 +910,10 @@ pub async fn send_email(
     to: String,
     subject: String,
     body: String,
+    attachments: Option<Vec<AttachmentPayload>>,
 ) -> Result<(), String> {
     let client = Client::builder().timeout(std::time::Duration::from_secs(30)).build().unwrap_or_default();
+    let atts = attachments.unwrap_or_default();
 
     let raw_email = build_raw_mime(
         &[
@@ -841,6 +921,7 @@ pub async fn send_email(
             ("Subject", mime_encode_header(&subject)),
         ],
         &body,
+        &atts,
     );
 
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw_email.as_bytes());
@@ -927,6 +1008,47 @@ pub async fn mark_as_unread(
     Ok(())
 }
 
+fn is_inline_part(part: &MessagePart) -> bool {
+    part.headers.as_ref().map_or(false, |hdrs| {
+        hdrs.iter().any(|h| {
+            h.name.eq_ignore_ascii_case("Content-Disposition")
+                && h.value.to_lowercase().starts_with("inline")
+        })
+    })
+}
+
+fn collect_attachments(
+    parts: &[MessagePart],
+    email_id: &str,
+    account_id: &str,
+) -> Vec<crate::db::Attachment> {
+    let mut result = Vec::new();
+    for part in parts {
+        let filename = part.filename.as_deref().unwrap_or("").trim().to_string();
+        if !filename.is_empty() && !is_inline_part(part) {
+            if let Some(body) = &part.body {
+                let size = body.size.unwrap_or(0);
+                let part_key = part.part_id.as_deref().unwrap_or(&filename);
+                let id = format!("{}_{}", email_id, part_key);
+                result.push(crate::db::Attachment {
+                    id,
+                    email_id: email_id.to_string(),
+                    account_id: account_id.to_string(),
+                    filename,
+                    mime_type: part.mime_type.clone(),
+                    size,
+                    attachment_id: body.attachment_id.clone(),
+                    data: body.data.clone(),
+                });
+            }
+        }
+        if let Some(subparts) = &part.parts {
+            result.extend(collect_attachments(subparts, email_id, account_id));
+        }
+    }
+    result
+}
+
 fn collect_inline_images(
     parts: &[MessagePart],
     cids: &mut std::collections::HashMap<String, String>,
@@ -986,4 +1108,111 @@ fn decode_base64_url(data: &str) -> String {
     } else {
         "Base64 Error".to_string()
     }
+}
+
+/// Fetches attachment data (from DB for small files, Gmail API for large ones).
+async fn get_attachment_bytes(
+    app: &tauri::AppHandle,
+    email_id: &str,
+    attachment_db_id: &str,
+    access_token: &str,
+) -> Result<(Vec<u8>, String, String), String> {
+    let atts = crate::db::get_email_attachments(app.clone(), email_id.to_string())
+        .map_err(|e| e.to_string())?;
+    let att = atts.into_iter().find(|a| a.id == attachment_db_id)
+        .ok_or_else(|| "Attachment not found".to_string())?;
+
+    let b64 = if let Some(data) = att.data.filter(|d| !d.is_empty()) {
+        data
+    } else {
+        let gmail_att_id = att.attachment_id
+            .ok_or_else(|| "No attachment ID".to_string())?;
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .unwrap_or_default();
+        let url = format!(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}/attachments/{}",
+            email_id, gmail_att_id
+        );
+        let res = client.get(&url).bearer_auth(access_token).send().await
+            .map_err(|e| format!("Fetch error: {}", e))?;
+        if !res.status().is_success() {
+            return Err(format!("Gmail API error: {}", res.text().await.unwrap_or_default()));
+        }
+        #[derive(serde::Deserialize)]
+        struct AttachmentResponse { data: String }
+        let body: AttachmentResponse = res.json().await.map_err(|e| e.to_string())?;
+        body.data
+    };
+
+    // Gmail uses URL-safe base64
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(b64.replace(['\n', '\r'], "").as_str())
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+
+    Ok((bytes, att.filename, att.mime_type))
+}
+
+/// Saves attachment to Downloads folder and reveals it in Windows Explorer.
+#[tauri::command]
+pub async fn save_and_reveal_attachment(
+    app: tauri::AppHandle,
+    email_id: String,
+    attachment_db_id: String,
+    access_token: String,
+) -> Result<String, String> {
+    let (bytes, filename, _mime) =
+        get_attachment_bytes(&app, &email_id, &attachment_db_id, &access_token).await?;
+
+    let downloads = app
+        .path()
+        .download_dir()
+        .map_err(|e| format!("Cannot find Downloads folder: {}", e))?;
+
+    // Avoid overwriting existing files by appending a counter
+    let mut dest = downloads.join(&filename);
+    if dest.exists() {
+        let stem = std::path::Path::new(&filename)
+            .file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+        let ext = std::path::Path::new(&filename)
+            .extension().and_then(|s| s.to_str()).unwrap_or("");
+        let mut i = 2u32;
+        loop {
+            let candidate = if ext.is_empty() {
+                format!("{} ({})", stem, i)
+            } else {
+                format!("{} ({}).{}", stem, i, ext)
+            };
+            dest = downloads.join(&candidate);
+            if !dest.exists() { break; }
+            i += 1;
+        }
+    }
+
+    std::fs::write(&dest, &bytes)
+        .map_err(|e| format!("Write error: {}", e))?;
+
+    // Reveal file selected in Windows Explorer
+    let _ = std::process::Command::new("explorer")
+        .arg(format!("/select,{}", dest.display()))
+        .spawn();
+
+    Ok(dest.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&filename)
+        .to_string())
+}
+
+/// Returns raw base64 data — used for image thumbnail preview in the frontend.
+#[tauri::command]
+pub async fn fetch_attachment_data(
+    app: tauri::AppHandle,
+    email_id: String,
+    attachment_db_id: String,
+    access_token: String,
+) -> Result<String, String> {
+    let (bytes, _filename, _mime) =
+        get_attachment_bytes(&app, &email_id, &attachment_db_id, &access_token).await?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
 }
