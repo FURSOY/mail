@@ -9,7 +9,7 @@ on:
       notes:
         description: "Release notes"
         required: false
-        default: "Stability, updater, mail rendering, and performance improvements."
+        default: "Fixed a critical bug where login session was lost every time the app was closed and reopened."
 
 permissions:
   contents: write
@@ -100,7 +100,7 @@ jobs:
         run: |
           $notes = $env:RELEASE_NOTES_INPUT
           if ([string]::IsNullOrWhiteSpace($notes)) {
-            $notes = "Stability, updater, mail rendering, and performance improvements."
+            $notes = "Fixed a critical bug where login session was lost every time the app was closed and reopened."
           }
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding UTF8
 
