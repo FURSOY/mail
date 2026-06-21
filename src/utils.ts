@@ -132,7 +132,7 @@ export function normalizeOtpPlaintext(text: string): string {
 
 // Email must contain at least one of these signals to be considered an OTP email
 const OTP_SIGNAL_RE =
-  /\b(?:verif(?:y|ication|ied)|doğrulama|dogrulama|confirm(?:ation)?|onay\s*kodu?|otp|one[\s-]?time|tek[\s-]?kullan|2fa|mfa|güvenlik\s*kodu?|guvenlik\s*kodu?|sms\s*kodu?|authentication\s*code|security\s*code|login\s*code|sign[\s-]?in\s*code|access\s*code|hesap\s*doğrulama)\b/i;
+  /\b(?:verif(?:y|ication|ied)|doğrula(?:ma|yın|n|mak|r)?|dogrula(?:ma|yin|n|mak|r)?|onayla(?:yın|n|mak)?|confirm(?:ation)?|onay\s*kodu?|otp|one[\s-]?time|tek[\s-]?kullan|2fa|mfa|güvenlik\s*kodu?|guvenlik\s*kodu?|sms\s*kodu?|authentication\s*code|security\s*code|login\s*code|sign[\s-]?in\s*code|access\s*code|hesap\s*doğrulama)\b/i;
 
 // Context words that suggest a number is NOT an OTP
 const FALSE_POS_RE =
@@ -213,12 +213,19 @@ function matchCodeFirst(text: string): string | null {
 }
 
 // Tier 5: imperative patterns — "enter 123456", "use code 654321", "girin: 123456"
-const ENTER_RE = /\b(?:enter|use|input|type|girin?|kullanın?|giriniz)\s+(?:the\s+)?(?:code\s+)?([A-Z0-9]{4,10})\b/gi;
+// Also handles Turkish "bu kodu kullanın: 123456" and "bu kodu girin: 123456" (Google emails)
+const ENTER_RE = /\b(?:enter|use|input|type|girin?|kullanın?|giriniz)\s*:?\s+(?:the\s+)?(?:code\s+)?([A-Z0-9]{4,10})\b/gi;
+const KODU_KULLAN_RE = /\b(?:bu\s+)?(?:kod(?:unuz|u|unu)?)\s+(?:kullanın?|girin?|giriniz)\s*[:\-]?\s*([A-Z0-9]{4,10})\b/gi;
 
 function matchEnter(text: string): string | null {
   ENTER_RE.lastIndex = 0;
   let m;
   while ((m = ENTER_RE.exec(text)) !== null) {
+    const code = m[1];
+    if (isValidCode(code) && !falsePositiveNearby(text, m.index, m[0].length)) return code;
+  }
+  KODU_KULLAN_RE.lastIndex = 0;
+  while ((m = KODU_KULLAN_RE.exec(text)) !== null) {
     const code = m[1];
     if (isValidCode(code) && !falsePositiveNearby(text, m.index, m[0].length)) return code;
   }
