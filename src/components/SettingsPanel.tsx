@@ -286,6 +286,30 @@ export function SettingsPanel({
             </label>
           </div>
 
+          {/* Language */}
+          <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-zinc-200 mb-1">Language</h3>
+            <p className="text-xs text-zinc-500 mb-4">Controls which OTP patterns are used for verification code detection.</p>
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-zinc-400">Email language</div>
+              <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
+                {(["en", "tr"] as EmailLanguage[]).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => {
+                      setEmailLanguage(lang);
+                      localStorage.setItem("fursoy_email_language", lang);
+                    }}
+                    className={`px-3 py-1.5 text-xs rounded-md transition-colors ${emailLanguage === lang ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                  >
+                    {lang === "en" ? "English" : "Turkish"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Notification and Sync Controls */}
           <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-zinc-200 mb-1">{tr.notifications.title}</h3>
@@ -446,26 +470,6 @@ export function SettingsPanel({
                       className={`px-3 py-1.5 text-xs rounded-md transition-colors ${otpMode === mode ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
                     >
                       {mode === "off" ? "Off" : mode === "balanced" ? "Balanced" : "Strict"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs font-medium text-zinc-300 mb-1">Email language</div>
-                <p className="text-xs text-zinc-500 mb-2">Determines which OTP patterns are used for code detection.</p>
-                <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
-                  {(["en", "tr"] as EmailLanguage[]).map((lang) => (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => {
-                        setEmailLanguage(lang);
-                        localStorage.setItem("fursoy_email_language", lang);
-                      }}
-                      className={`px-3 py-1.5 text-xs rounded-md transition-colors ${emailLanguage === lang ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
-                    >
-                      {lang === "en" ? "English" : "Turkish"}
                     </button>
                   ))}
                 </div>
