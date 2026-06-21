@@ -9,7 +9,7 @@ on:
       notes:
         description: "Release notes"
         required: false
-        default: "Redesigned notification card layout: the copy button now sits inline next to the dismiss button, eliminating the extra row that caused the card to bloat in multi-account OTP mode. Also reduced padding and avatar size for a more compact appearance."
+        default: "Fix profile photo appearing as a large square in the notification in production builds. Wrap the avatar image in a clipping container div so border-radius and size constraints are enforced by the parent element rather than relying solely on inline img styles, which were inconsistently applied by WebView2 in installed builds."
 
 permissions:
   contents: write
@@ -100,7 +100,7 @@ jobs:
         run: |
           $notes = $env:RELEASE_NOTES_INPUT
           if ([string]::IsNullOrWhiteSpace($notes)) {
-            $notes = "Redesigned notification card layout: the copy button now sits inline next to the dismiss button, eliminating the extra row that caused the card to bloat in multi-account OTP mode. Also reduced padding and avatar size for a more compact appearance."
+            $notes = "Fix profile photo appearing as a large square in the notification in production builds. Wrap the avatar image in a clipping container div so border-radius and size constraints are enforced by the parent element rather than relying solely on inline img styles, which were inconsistently applied by WebView2 in installed builds."
           }
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding UTF8
 
