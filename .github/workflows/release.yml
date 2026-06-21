@@ -9,7 +9,7 @@ on:
       notes:
         description: "Release notes"
         required: false
-        default: "Attachment support: view, preview, and download attachments from received emails. Compose and reply with file attachments (up to 20 MB total). Rich-text reply editor with formatting toolbar (bold, italic, underline, links, lists, undo/redo). Multi-account notification labels. Fixed WebView2 DPI rendering glitch when restoring the window from tray."
+        default: "Onboarding screen shown on first launch. Full English UI translation. Email language setting (English / Turkish) controls which OTP patterns are used for code detection. Fixed Turkish OTP keywords missing from signal gate."
 
 permissions:
   contents: write
@@ -100,7 +100,7 @@ jobs:
         run: |
           $notes = $env:RELEASE_NOTES_INPUT
           if ([string]::IsNullOrWhiteSpace($notes)) {
-            $notes = "Attachment support: view, preview, and download attachments from received emails. Compose and reply with file attachments (up to 20 MB total). Rich-text reply editor with formatting toolbar (bold, italic, underline, links, lists, undo/redo). Multi-account notification labels. Fixed WebView2 DPI rendering glitch when restoring the window from tray."
+            $notes = "Onboarding screen shown on first launch. Full English UI translation. Email language setting (English / Turkish) controls which OTP patterns are used for code detection. Fixed Turkish OTP keywords missing from signal gate."
           }
           Set-Content -Path RELEASE_NOTES.md -Value $notes -Encoding UTF8
 

@@ -1,4 +1,5 @@
 export type OtpMode = "off" | "balanced" | "strict";
+export type EmailLanguage = "en" | "tr";
 export type RenderMode = "full" | "simple";
 export type MailZoom = "fit" | number;
 export type DensityMode = "comfortable" | "compact";

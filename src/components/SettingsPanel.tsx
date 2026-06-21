@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw, DownloadCloud, Menu, LogOut, Plus, GripVertical } from "lucide-react";
 import { tr } from "../i18n";
 import { themePresets, typography, ui, type ThemePresetName } from "../theme";
-import type { Account, AppControls, DensityMode, MailDebugMetrics, OtpMode, RenderMode } from "../types";
+import type { Account, AppControls, DensityMode, EmailLanguage, MailDebugMetrics, OtpMode, RenderMode } from "../types";
 
 interface SettingsPanelProps {
   isVisible: boolean;
@@ -35,6 +35,8 @@ interface SettingsPanelProps {
   setRenderMode: (v: RenderMode) => void;
   otpMode: OtpMode;
   setOtpMode: (v: OtpMode) => void;
+  emailLanguage: EmailLanguage;
+  setEmailLanguage: (v: EmailLanguage) => void;
   pauseOnFullscreen: boolean;
   setPauseOnFullscreen: (v: boolean) => void;
 
@@ -64,7 +66,7 @@ export function SettingsPanel({
   appControls, onUpdateAppControls,
   notifDuration, setNotifDuration, notifInfinite, setNotifInfinite,
   lazyBodyLoading, setLazyBodyLoading, renderMode, setRenderMode,
-  otpMode, setOtpMode, pauseOnFullscreen, setPauseOnFullscreen,
+  otpMode, setOtpMode, emailLanguage, setEmailLanguage, pauseOnFullscreen, setPauseOnFullscreen,
   debugMetrics, onClearCaches,
   currentVersion, isCheckingUpdate, updateAvailable, updateProgress, updateError, updateStatus,
   onCheckForUpdates, onInstallUpdate,
@@ -431,7 +433,7 @@ export function SettingsPanel({
               </div>
 
               <div>
-                <div className="text-xs font-medium text-zinc-300 mb-2">OTP Detection</div>
+                <div className="text-xs font-medium text-zinc-300 mb-1">OTP Detection</div>
                 <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
                   {(["off", "balanced", "strict"] as OtpMode[]).map((mode) => (
                     <button
@@ -444,6 +446,26 @@ export function SettingsPanel({
                       className={`px-3 py-1.5 text-xs rounded-md transition-colors ${otpMode === mode ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
                     >
                       {mode === "off" ? "Off" : mode === "balanced" ? "Balanced" : "Strict"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-zinc-300 mb-1">Email language</div>
+                <p className="text-xs text-zinc-500 mb-2">Determines which OTP patterns are used for code detection.</p>
+                <div className="inline-flex rounded-lg border border-white/10 bg-[#09090b] p-1">
+                  {(["en", "tr"] as EmailLanguage[]).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => {
+                        setEmailLanguage(lang);
+                        localStorage.setItem("fursoy_email_language", lang);
+                      }}
+                      className={`px-3 py-1.5 text-xs rounded-md transition-colors ${emailLanguage === lang ? "bg-white/10 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+                    >
+                      {lang === "en" ? "English" : "Turkish"}
                     </button>
                   ))}
                 </div>

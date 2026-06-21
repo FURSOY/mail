@@ -14,7 +14,7 @@ import { themePresets, type ThemePresetName } from "./theme";
 import "./index.css";
 
 import {
-  type Account, type EmailSummary, type ThreadGroup, type AuthInfo, type AppControls, type OtpMode, type RenderMode,
+  type Account, type EmailSummary, type ThreadGroup, type AuthInfo, type AppControls, type OtpMode, type EmailLanguage, type RenderMode,
   type MailZoom, type DensityMode, type MailViewMode, type MailViewPreference,
   type MailDebugMetrics, DEFAULT_APP_CONTROLS,
 } from "./types";
@@ -28,6 +28,7 @@ import {
 } from "./utils";
 
 import { Sidebar } from "./components/Sidebar";
+import { Onboarding } from "./components/Onboarding";
 import { EmailList } from "./components/EmailList";
 import { EmailReader } from "./components/EmailReader";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -72,6 +73,10 @@ function App() {
     const saved = localStorage.getItem("fursoy_otp_mode");
     return saved === "off" || saved === "strict" ? saved : "balanced";
   });
+  const [emailLanguage, setEmailLanguage] = useState<EmailLanguage>(() => {
+    const saved = localStorage.getItem("fursoy_email_language");
+    return saved === "tr" ? "tr" : "en";
+  });
   const [themePreset, setThemePreset] = useState<ThemePresetName>(() => readThemePreset());
   const [densityMode, setDensityMode] = useState<DensityMode>(() => {
     return localStorage.getItem("fursoy_density_mode") === "compact" ? "compact" : "comfortable";
@@ -94,6 +99,8 @@ function App() {
   });
   // multi-account
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [accountTokens, setAccountTokens] = useState<Record<string, string>>({});
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
 
@@ -566,7 +573,7 @@ function App() {
       for (const email of newEmails.slice(0, 5)) {
         const senderName = email.sender.split("<")[0].replace(/"/g, "").trim() || email.sender;
         const body = otpMode === "off" ? "" : await invoke<string>("get_email_body", { id: email.id }).catch(() => "");
-        const code = extractVerificationCode({ ...email, body_html: body }, otpMode);
+        const code = extractVerificationCode({ ...email, body_html: body }, otpMode, emailLanguage);
         const account = accountsRef.current.find(a => a.id === email.account_id);
         await invoke("show_custom_notification", {
           title: senderName.slice(0, 64),
@@ -697,6 +704,7 @@ function App() {
     // Multi-account startup: load all accounts and their tokens
     invoke<Account[]>("get_accounts")
       .then(async (loadedAccounts) => {
+        setAccountsLoaded(true);
         if (loadedAccounts.length === 0) return;
 
         setAccounts(loadedAccounts);
@@ -826,6 +834,7 @@ function App() {
   };
 
   async function loginWithGoogle() {
+    setIsConnecting(true);
     try {
       setAuthStatus(tr.auth.waitingForBrowser);
       const res = await invoke<AuthInfo>("start_google_oauth");
@@ -863,6 +872,8 @@ function App() {
       setAuthStatus("Error: " + e);
       setIsUserSyncing(false);
       showToast("Sign-in failed: " + e, "error");
+    } finally {
+      setIsConnecting(false);
     }
   }
 
@@ -1283,7 +1294,7 @@ function App() {
   const unreadCount = inboxUnread;
   const hasLoadedActiveBody = !!activeMail && selectedMailBodyId === activeMail.id;
   const verificationCode = activeMail && hasLoadedActiveBody
-    ? extractVerificationCode({ ...activeMail, body_html: selectedMailBody }, otpMode)
+    ? extractVerificationCode({ ...activeMail, body_html: selectedMailBody }, otpMode, emailLanguage)
     : null;
   const activeMailHtml = activeMail && hasLoadedActiveBody
     ? buildRenderableEmailHtml(selectedMailBody, activeMail.snippet, renderMode)
@@ -1317,6 +1328,10 @@ function App() {
       nextMode === "split" || nextMode === "inbox-first" || !selectedMail ? "list" : singlePanelView
     );
   };
+
+  if (accountsLoaded && accounts.length === 0) {
+    return <Onboarding onConnect={loginWithGoogle} isConnecting={isConnecting} />;
+  }
 
   return (
     <div className="flex flex-col h-screen bg-[#09090b] text-zinc-300 font-sans overflow-hidden select-none">
@@ -1438,6 +1453,7 @@ function App() {
           lazyBodyLoading={lazyBodyLoading} setLazyBodyLoading={setLazyBodyLoading}
           renderMode={renderMode} setRenderMode={setRenderMode}
           otpMode={otpMode} setOtpMode={setOtpMode}
+          emailLanguage={emailLanguage} setEmailLanguage={setEmailLanguage}
           pauseOnFullscreen={pauseOnFullscreen} setPauseOnFullscreen={setPauseOnFullscreen}
           debugMetrics={debugMetrics} onClearCaches={clearPerformanceCaches}
           currentVersion={currentVersion}
