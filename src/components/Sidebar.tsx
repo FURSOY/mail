@@ -107,11 +107,11 @@ export function Sidebar({
 
           <div className="flex-1 min-w-0">
             <div className={`text-xs font-medium truncate ${isExpired ? "text-orange-400" : isActive ? "text-zinc-100" : "text-zinc-300"}`}>
-              {isAll ? "All accounts" : email.split("@")[0]}
+              {isAll ? tr.mail.allAccounts : email.split("@")[0]}
             </div>
             {!isAll && (
               <div className={`text-[10px] truncate ${isExpired ? "text-orange-600" : "text-zinc-600"}`}>
-                {isExpired ? "Session expired" : email}
+                {isExpired ? tr.mail.sessionExpired : email}
               </div>
             )}
           </div>
@@ -201,7 +201,7 @@ export function Sidebar({
           ) : (
             <>
               {/* "All accounts" combined view — only when 2+ accounts */}
-              {accounts.length > 1 && accountItem(null, null, "All accounts", true)}
+              {accounts.length > 1 && accountItem(null, null, tr.mail.allAccounts, true)}
 
               {/* Individual accounts */}
               {accounts.map(acc => accountItem(acc.id, acc.picture || null, acc.email))}

@@ -59,17 +59,17 @@ export function EmailList({
             </span>
           )}
           {isBackgroundSyncing && !isUserSyncing && (
-            <span className="text-[10px] text-zinc-600 font-medium">Updating in background</span>
+            <span className="text-[10px] text-zinc-600 font-medium">{tr.mail.updatingInBackground}</span>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <div className="inline-flex rounded-md border border-white/10 bg-white/[0.03] p-0.5">
             {(
               [
-                ["auto", Settings, "Auto"],
-                ["split", Columns2, "Side by side"],
-                ["single-toggle", PanelLeft, "Compact"],
-                ["inbox-first", Rows3, "List focus"],
+                ["auto", Settings, tr.mail.viewAuto],
+                ["split", Columns2, tr.mail.viewSideBySide],
+                ["single-toggle", PanelLeft, tr.mail.viewCompact],
+                ["inbox-first", Rows3, tr.mail.viewListFocus],
               ] as const
             ).map(([mode, Icon, label]) => (
               <button
@@ -88,7 +88,7 @@ export function EmailList({
               </button>
             ))}
           </div>
-          <ToolbarTip label="Force refresh from server">
+          <ToolbarTip label={tr.mail.forceRefresh}>
             <button
               type="button"
               onClick={onRefresh}
@@ -110,7 +110,7 @@ export function EmailList({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search emails... (Ctrl+K)"
+            placeholder={tr.mail.searchPlaceholder}
             className="w-full bg-white/[0.03] border border-white/5 rounded-lg pl-8 pr-7 py-1.5 text-xs outline-none focus:border-blue-500/40 focus:bg-white/[0.02] transition-colors text-zinc-200 placeholder:text-zinc-600 select-text"
           />
           {searchQuery && (

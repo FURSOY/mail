@@ -325,7 +325,7 @@ export function ComposeModal({
           {/* To */}
           <div className="relative">
             <div className="relative flex items-center">
-              <span className="absolute left-3 text-[10px] text-zinc-600 pointer-events-none">To</span>
+              <span className="absolute left-3 text-[10px] text-zinc-600 pointer-events-none">{tr.compose.toLabelShort}</span>
               <input
                 ref={toRef}
                 value={composeTo}
@@ -366,11 +366,11 @@ export function ComposeModal({
 
           {/* Subject */}
           <div className="relative flex items-center">
-            <span className="absolute left-3 text-[10px] text-zinc-600 pointer-events-none">Subject</span>
+            <span className="absolute left-3 text-[10px] text-zinc-600 pointer-events-none">{tr.compose.subject}</span>
             <input
               value={composeSubject}
               onChange={e => setComposeSubject(e.target.value)}
-              placeholder="Email subject"
+              placeholder={tr.compose.subjectPlaceholder}
               className={`${ui.input} pl-12`}
             />
           </div>
@@ -428,7 +428,7 @@ export function ComposeModal({
                 {linkPopover && (
                   <div className="absolute bottom-full left-0 mb-1 bg-[#18181b] border border-white/10 rounded-xl p-3 shadow-2xl z-50 w-64">
                     <div className="flex flex-col gap-2">
-                      <input autoFocus value={linkText} onChange={e => setLinkText(e.target.value)} placeholder="Metin"
+                      <input autoFocus value={linkText} onChange={e => setLinkText(e.target.value)} placeholder={tr.compose.linkText}
                         className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500/50 placeholder:text-zinc-600" />
                       <input value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://..."
                         className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
@@ -441,21 +441,21 @@ export function ComposeModal({
                     </div>
                   </div>
                 )}
-                <button type="button" title="Geri Al" disabled={!canUndo} onMouseDown={e => { e.preventDefault(); applyFormat("undo"); }}
+                <button type="button" title={tr.compose.undo} disabled={!canUndo} onMouseDown={e => { e.preventDefault(); applyFormat("undo"); }}
                   className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${canUndo ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] cursor-pointer" : "text-zinc-700 cursor-default"}`}>
                   <Undo2 className="w-3.5 h-3.5" />
                 </button>
-                <button type="button" title="Yeniden Yap" disabled={!canRedo} onMouseDown={e => { e.preventDefault(); applyFormat("redo"); }}
+                <button type="button" title={tr.compose.redo} disabled={!canRedo} onMouseDown={e => { e.preventDefault(); applyFormat("redo"); }}
                   className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${canRedo ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] cursor-pointer" : "text-zinc-700 cursor-default"}`}>
                   <Redo2 className="w-3.5 h-3.5" />
                 </button>
                 <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
                 {([
-                  { cmd: "bold",          label: "B", cls: "font-bold",    title: "Bold" },
-                  { cmd: "italic",        label: "I", cls: "italic",       title: "Italic" },
-                  { cmd: "underline",     label: "U", cls: "underline",    title: "Underline" },
+                  { cmd: "bold",          label: "B", cls: "font-bold",    title: tr.compose.bold },
+                  { cmd: "italic",        label: "I", cls: "italic",       title: tr.compose.italic },
+                  { cmd: "underline",     label: "U", cls: "underline",    title: tr.compose.underline },
                   { cmd: "strikeThrough", label: "S", cls: "line-through", title: "Strikethrough" },
-                ] as const).map(({ cmd, label, cls, title }) => (
+                ] as { cmd: string; label: string; cls: string; title: string }[]).map(({ cmd, label, cls, title }) => (
                   <button key={cmd} type="button" title={title}
                     onMouseDown={e => { e.preventDefault(); applyFormat(cmd); }}
                     className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] text-xs transition-colors">
@@ -463,18 +463,18 @@ export function ComposeModal({
                   </button>
                 ))}
                 <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
-                <button type="button" title="Insert link"
+                <button type="button" title={tr.compose.insertLink}
                   onMouseDown={e => { e.preventDefault(); saveSelection(); setLinkUrl(""); setLinkPopover(v => !v); }}
                   className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${linkPopover ? "text-blue-400 bg-blue-500/10" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"}`}>
                   <Link2 className="w-3.5 h-3.5" />
                 </button>
                 <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
-                <button type="button" title="Numbered list"
+                <button type="button" title={tr.compose.numberedList}
                   onMouseDown={e => { e.preventDefault(); applyFormat("insertOrderedList"); }}
                   className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors">
                   <ListOrdered className="w-3.5 h-3.5" />
                 </button>
-                <button type="button" title="Bullet list"
+                <button type="button" title={tr.compose.bulletList}
                   onMouseDown={e => { e.preventDefault(); applyFormat("insertUnorderedList"); }}
                   className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors">
                   <List className="w-3.5 h-3.5" />
@@ -484,7 +484,7 @@ export function ComposeModal({
 
             {/* Bottom bar — paperclip + format toggle */}
             <div className="px-2 py-1.5 border-t border-white/[0.06] flex items-center gap-1 shrink-0">
-              <button type="button" title="Attach file" onClick={() => fileInputRef.current?.click()}
+              <button type="button" title={tr.compose.attachFile} onClick={() => fileInputRef.current?.click()}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>

@@ -293,7 +293,7 @@ export function EmailReader({
       });
       showToast(`Saved to Downloads: ${savedName}`, "success");
     } catch (e) {
-      showToast("Download failed", "error");
+      showToast(tr.mail.downloadFailed, "error");
       console.error("Download failed:", e);
     } finally {
       setDownloadingId(null);
@@ -430,7 +430,7 @@ export function EmailReader({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-0.5" style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
-          <ToolbarTip label="Reply">
+          <ToolbarTip label={tr.mail.replyTo}>
             <button
               type="button"
               onClick={() => openReply("reply")}
@@ -441,7 +441,7 @@ export function EmailReader({
               <CornerUpLeft className="w-4 h-4" />
             </button>
           </ToolbarTip>
-          <ToolbarTip label="Reply all">
+          <ToolbarTip label={tr.mail.replyAll}>
             <button
               type="button"
               onClick={() => openReply("reply-all")}
@@ -452,39 +452,39 @@ export function EmailReader({
               <Users className="w-4 h-4" />
             </button>
           </ToolbarTip>
-          <ToolbarTip label="Forward">
+          <ToolbarTip label={tr.mail.forward}>
             <button type="button" onClick={onForward} className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-zinc-200 transition-colors">
               <Forward className="w-4 h-4" />
             </button>
           </ToolbarTip>
-          <ToolbarTip label="Mark as unread">
+          <ToolbarTip label={tr.mail.markAsUnread}>
             <button type="button" onClick={onMarkAsUnread} className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-zinc-200 transition-colors">
               <Eye className="w-4 h-4" />
             </button>
           </ToolbarTip>
           {showRestoreBtn && (
-            <ToolbarTip label={activeTab === "spam" ? "Not spam (inbox)" : "Move to inbox"}>
+            <ToolbarTip label={activeTab === "spam" ? tr.actions.notSpam : tr.actions.restoreInbox}>
               <button type="button" onClick={onMoveToInbox} className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-emerald-400 transition-colors">
                 <RotateCcw className="w-4 h-4" />
               </button>
             </ToolbarTip>
           )}
           {showArchiveBtn && (
-            <ToolbarTip label="Archive">
+            <ToolbarTip label={tr.actions.archive}>
               <button type="button" onClick={onArchive} className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-amber-400 transition-colors">
                 <Archive className="w-4 h-4" />
               </button>
             </ToolbarTip>
           )}
           {showTrashToBinBtn && (
-            <ToolbarTip label="Move to trash">
+            <ToolbarTip label={tr.actions.moveTrash}>
               <button type="button" onClick={onTrash} className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-400 transition-colors">
                 <Trash2 className="w-4 h-4" />
               </button>
             </ToolbarTip>
           )}
           {showDeleteForeverBtn && (
-            <ToolbarTip label="Delete permanently">
+            <ToolbarTip label={tr.actions.deleteForever}>
               <button type="button" onClick={onPermanentDelete} className="p-2 rounded-md hover:bg-white/5 text-zinc-400 hover:text-red-500 transition-colors">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -690,34 +690,34 @@ export function EmailReader({
 
           {/* Mobile action buttons */}
           <div className="flex md:hidden items-center gap-1 mt-4">
-            <ToolbarTip label="Reply">
+            <ToolbarTip label={tr.mail.replyTo}>
               <button type="button" onClick={() => setShowReply(!showReply)} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
                 <CornerUpLeft className="w-4 h-4" />
               </button>
             </ToolbarTip>
             {showRestoreBtn && (
-              <ToolbarTip label={activeTab === "spam" ? "Not spam" : "Inbox"}>
+              <ToolbarTip label={activeTab === "spam" ? tr.actions.notSpam : tr.mail.inbox}>
                 <button type="button" onClick={onMoveToInbox} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
                   <RotateCcw className="w-4 h-4" />
                 </button>
               </ToolbarTip>
             )}
             {showArchiveBtn && (
-              <ToolbarTip label="Archive">
+              <ToolbarTip label={tr.actions.archive}>
                 <button type="button" onClick={onArchive} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
                   <Archive className="w-4 h-4" />
                 </button>
               </ToolbarTip>
             )}
             {showTrashToBinBtn && (
-              <ToolbarTip label="Move to trash">
+              <ToolbarTip label={tr.actions.moveTrash}>
                 <button type="button" onClick={onTrash} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </ToolbarTip>
             )}
             {showDeleteForeverBtn && (
-              <ToolbarTip label="Delete">
+              <ToolbarTip label={tr.mail.delete}>
                 <button type="button" onClick={onPermanentDelete} className="p-2 rounded-md hover:bg-white/5 text-zinc-400">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -779,7 +779,7 @@ export function EmailReader({
                           autoFocus
                           value={linkText}
                           onChange={e => setLinkText(e.target.value)}
-                          placeholder="Metin"
+                          placeholder={tr.compose.linkText}
                           className="w-full bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500/50 placeholder:text-zinc-600"
                         />
                         <input
@@ -794,7 +794,7 @@ export function EmailReader({
                             type="button"
                             onClick={() => setLinkPopover(false)}
                             className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                          >Cancel</button>
+                          >{tr.mail.cancel}</button>
                           <button
                             type="button"
                             onClick={applyLink}
@@ -807,21 +807,21 @@ export function EmailReader({
                   )}
 
                   {/* Format buttons */}
-                  <button type="button" title="Geri Al" disabled={!canUndo} onMouseDown={e => { e.preventDefault(); applyFormat("undo"); }}
+                  <button type="button" title={tr.compose.undo} disabled={!canUndo} onMouseDown={e => { e.preventDefault(); applyFormat("undo"); }}
                     className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${canUndo ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] cursor-pointer" : "text-zinc-700 cursor-default"}`}>
                     <Undo2 className="w-3.5 h-3.5" />
                   </button>
-                  <button type="button" title="Yeniden Yap" disabled={!canRedo} onMouseDown={e => { e.preventDefault(); applyFormat("redo"); }}
+                  <button type="button" title={tr.compose.redo} disabled={!canRedo} onMouseDown={e => { e.preventDefault(); applyFormat("redo"); }}
                     className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${canRedo ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] cursor-pointer" : "text-zinc-700 cursor-default"}`}>
                     <Redo2 className="w-3.5 h-3.5" />
                   </button>
                   <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
                   {([
-                    { cmd: "bold",          label: "B",  cls: "font-bold",      title: "Bold" },
-                    { cmd: "italic",        label: "I",  cls: "italic",         title: "Italic" },
-                    { cmd: "underline",     label: "U",  cls: "underline",      title: "Underline" },
+                    { cmd: "bold",          label: "B",  cls: "font-bold",      title: tr.compose.bold },
+                    { cmd: "italic",        label: "I",  cls: "italic",         title: tr.compose.italic },
+                    { cmd: "underline",     label: "U",  cls: "underline",      title: tr.compose.underline },
                     { cmd: "strikeThrough", label: "S",  cls: "line-through",   title: "Strikethrough" },
-                  ] as const).map(({ cmd, label, cls, title }) => (
+                  ] as { cmd: string; label: string; cls: string; title: string }[]).map(({ cmd, label, cls, title }) => (
                     <button
                       key={cmd}
                       type="button"
@@ -837,7 +837,7 @@ export function EmailReader({
 
                   <button
                     type="button"
-                    title="Insert link"
+                    title={tr.compose.insertLink}
                     onMouseDown={e => {
                       e.preventDefault();
                       saveSelection();
@@ -855,7 +855,7 @@ export function EmailReader({
 
                   <button
                     type="button"
-                    title="Numbered list"
+                    title={tr.compose.numberedList}
                     onMouseDown={e => { e.preventDefault(); applyFormat("insertOrderedList"); }}
                     className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors"
                   >
@@ -863,7 +863,7 @@ export function EmailReader({
                   </button>
                   <button
                     type="button"
-                    title="Bullet list"
+                    title={tr.compose.bulletList}
                     onMouseDown={e => { e.preventDefault(); applyFormat("insertUnorderedList"); }}
                     className="w-7 h-7 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors"
                   >
@@ -900,7 +900,7 @@ export function EmailReader({
                   {/* Paperclip */}
                   <button
                     type="button"
-                    title="Attach file"
+                    title={tr.compose.attachFile}
                     onClick={() => replyFileInputRef.current?.click()}
                     className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors"
                   >
